@@ -665,7 +665,13 @@ fn compact_messages(messages: &[Message]) -> Vec<Message> {
     let Some(boundary) = messages.iter().position(message_has_mutation) else {
         return messages.to_vec();
     };
-    let selected_call_ids = selected_message_call_ids(&messages[boundary..]);
+    let mut selected_call_ids = selected_message_call_ids(&messages[boundary..]);
+    selected_call_ids.extend(messages[..boundary].iter().flat_map(|message| {
+        message.content.iter().filter_map(|block| match block {
+            ContentBlock::ToolCall(call) => Some(call.id.clone()),
+            _ => None,
+        })
+    }));
     messages[..boundary]
         .iter()
         .cloned()
@@ -748,7 +754,7 @@ fn compact_responses_input(input: &[serde_json::Value]) -> Vec<serde_json::Value
         .find(|item| raw_item_is_mutation(item))
         .and_then(|item| item.get("call_id"))
         .and_then(serde_json::Value::as_str);
-    let selected_call_ids = calls
+    let mut selected_call_ids = calls
         .iter()
         .enumerate()
         .filter(|(index, item)| {
@@ -758,6 +764,11 @@ fn compact_responses_input(input: &[serde_json::Value]) -> Vec<serde_json::Value
         })
         .filter_map(|(_, item)| item.get("call_id").and_then(serde_json::Value::as_str))
         .collect::<HashSet<_>>();
+    selected_call_ids.extend(input[..boundary].iter().filter_map(|item| {
+        (item.get("type").and_then(serde_json::Value::as_str) == Some("function_call"))
+            .then(|| item.get("call_id").and_then(serde_json::Value::as_str))
+            .flatten()
+    }));
 
     input[..boundary]
         .iter()

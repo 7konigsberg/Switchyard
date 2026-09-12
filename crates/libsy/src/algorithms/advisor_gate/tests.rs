@@ -1314,6 +1314,67 @@ fn responses_execution_delta_preserves_exact_planner_prefix() {
     assert!(encoded.contains("check-7"));
 }
 
+#[test]
+fn execution_delta_preserves_output_for_call_before_mutation_boundary() {
+    let messages = vec![
+        Message {
+            role: Role::Assistant,
+            content: vec![ContentBlock::ToolCall(ToolCall {
+                id: "read-before-edit".to_string(),
+                name: "read_file".to_string(),
+                arguments: serde_json::json!({"path": "parser.rs"}),
+            })],
+        },
+        Message {
+            role: Role::Assistant,
+            content: vec![ContentBlock::ToolCall(ToolCall {
+                id: "edit".to_string(),
+                name: "apply_patch".to_string(),
+                arguments: serde_json::json!({"patch": "change"}),
+            })],
+        },
+        Message {
+            role: Role::User,
+            content: vec![
+                ContentBlock::ToolResult(ToolResult {
+                    tool_call_id: "read-before-edit".to_string(),
+                    content: vec![ContentBlock::Text {
+                        text: "source".to_string(),
+                    }],
+                    is_error: Some(false),
+                }),
+                ContentBlock::ToolResult(ToolResult {
+                    tool_call_id: "edit".to_string(),
+                    content: vec![ContentBlock::Text {
+                        text: "updated".to_string(),
+                    }],
+                    is_error: Some(false),
+                }),
+            ],
+        },
+    ];
+
+    let compact = super::compact_messages(&messages);
+    let encoded = serde_json::to_string(&compact).expect("messages serialize");
+    assert!(encoded.contains("read-before-edit"));
+    assert!(encoded.contains("source"));
+    assert!(encoded.contains("edit"));
+    assert!(encoded.contains("updated"));
+}
+
+#[test]
+fn responses_execution_delta_preserves_output_for_call_before_mutation_boundary() {
+    let input = vec![
+        serde_json::json!({"type": "function_call", "call_id": "read-before-edit", "name": "read_file", "arguments": "{}"}),
+        serde_json::json!({"type": "function_call", "call_id": "edit", "name": "apply_patch", "arguments": "{\"patch\":\"change\"}"}),
+        serde_json::json!({"type": "function_call_output", "call_id": "read-before-edit", "output": "source"}),
+        serde_json::json!({"type": "function_call_output", "call_id": "edit", "output": "updated"}),
+    ];
+
+    let compact = super::compact_responses_input(&input);
+    assert_eq!(compact, input);
+}
+
 #[tokio::test]
 async fn consult_transcript_includes_system_instructions() {
     let script = Script::new();
