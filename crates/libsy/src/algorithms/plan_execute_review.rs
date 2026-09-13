@@ -336,6 +336,14 @@ mod tests {
         assert!(!pattern.is_match("Implementation is complete, now running tests"));
     }
 
+    #[test]
+    fn default_execution_prompt_requires_review_evidence() {
+        assert!(DEFAULT_EXECUTION_PROMPT.contains("/tmp/switchyard-review-base"));
+        assert!(DEFAULT_EXECUTION_PROMPT.contains("switchyard_review_test_evidence"));
+        assert!(DEFAULT_EXECUTION_PROMPT.contains("switchyard_review_patch_chunk"));
+        assert!(DEFAULT_EXECUTION_PROMPT.contains("git diff --binary"));
+    }
+
     #[tokio::test]
     async fn plans_then_reviews_completed_execution() {
         let algorithm: Arc<dyn Algorithm> = Arc::new(
