@@ -15,18 +15,15 @@
 //! Which text, and when, is the caller's policy; this module only knows how to
 //! place it so the provider accepts it and the prompt cache survives.
 //!
-//! **Anything added here must call [`drop_exact_replay`].** Both shapes above
-//! mutate the normalized request, and a codec asked to encode for the format the
-//! request arrived in replays the body captured at decode instead of reading that
-//! request — so an addition that leaves exact replay in place never reaches the
-//! model. This is not enforced: a future processor that mutates the request and
-//! forgets the call reintroduces SWITCH-1224, silently and without a failing
-//! test.
+//! Both shapes mutate the normalized request. Prompt injection updates preserved
+//! Responses requests in place and otherwise disables exact replay.
 
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
-use switchyard_protocol::{ContentBlock, InstructionBlock, Message, ModelId, Request, Role};
+use switchyard_protocol::{
+    ContentBlock, FormatId, InstructionBlock, Message, ModelId, Request, Role, WireFormat,
+};
 
 use crate::Result;
 use crate::core::processor::{Event, Processor};
@@ -68,6 +65,44 @@ pub fn append_note(request: &mut Request, note: &str) {
 /// have.
 pub(crate) fn drop_exact_replay(request: &mut Request) {
     request.llm_request.preservation.requests.clear();
+}
+
+/// Updates preserved Responses instructions without rebuilding opaque input items.
+fn prepend_exact_responses_instructions(request: &mut Request, prompt: &str) -> bool {
+    let format = FormatId::known(WireFormat::OpenAiResponses);
+    let Some(body) = request
+        .llm_request
+        .preservation
+        .requests
+        .get_mut(&format)
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return false;
+    };
+    let existing = match body.get("instructions") {
+        None | Some(serde_json::Value::Null) => "",
+        Some(value) => match value.as_str() {
+            Some(value) => value,
+            None => return false,
+        },
+    };
+    let instructions = if existing == prompt || existing.starts_with(&format!("{prompt}\n\n")) {
+        existing.to_string()
+    } else if existing.is_empty() {
+        prompt.to_string()
+    } else {
+        format!("{prompt}\n\n{existing}")
+    };
+    body.insert(
+        "instructions".to_string(),
+        serde_json::Value::String(instructions),
+    );
+    request
+        .llm_request
+        .preservation
+        .requests
+        .retain(|candidate, _| candidate == &format);
+    true
 }
 
 /// System prompts keyed by routing target. A target left unset is routed
@@ -135,7 +170,9 @@ impl<S: Send> Processor<S> for SystemPromptProcessor {
                 }],
             },
         );
-        drop_exact_replay(request);
+        if !prepend_exact_responses_instructions(request, prompt) {
+            drop_exact_replay(request);
+        }
         Ok(())
     }
 }
@@ -364,6 +401,45 @@ mod tests {
             )
             .await?;
         assert!(instructions(&request).is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_target_prompt_preserves_exact_responses_input() -> Result<()> {
+        let format = FormatId::known(WireFormat::OpenAiResponses);
+        let input = serde_json::json!([
+            {"type": "reasoning", "id": "rs_1", "encrypted_content": "opaque"},
+            {"type": "message", "role": "user", "content": "continue"}
+        ]);
+        let mut request = Request::default();
+        request.llm_request.preservation.requests.insert(
+            format.clone(),
+            serde_json::json!({
+                "model": "weak",
+                "instructions": "Keep public APIs stable.",
+                "input": input
+            }),
+        );
+        let selected_model_id = ModelId::from("weak");
+        let processor = SystemPromptProcessor::new(prompts());
+
+        processor
+            .process(
+                &mut (),
+                Event::Decision {
+                    request: &mut request,
+                    selected_model_id: &selected_model_id,
+                },
+            )
+            .await?;
+
+        let body = &request.llm_request.preservation.requests[&format];
+        assert_eq!(
+            body["instructions"],
+            format!("{WEAK_PROMPT}\n\nKeep public APIs stable.")
+        );
+        assert_eq!(body["input"], input);
+        assert_eq!(request.llm_request.preservation.requests.len(), 1);
         Ok(())
     }
 }
