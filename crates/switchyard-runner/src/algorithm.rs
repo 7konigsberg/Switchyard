@@ -14,9 +14,9 @@ use libsy::{
     ClassifyTrigger, CompositeRouter, CompositeRouterConfig, CustomClassifierConfig,
     CustomClassifierPolicy, EscalationJudgeConfig, GateTrigger, HandoffNoteConfig,
     LlmClassifierConfig, LlmFallback, LlmTaskClassifier, Noop, Passthrough, PickerMode,
-    PlanExecute, PlanExecuteConfig, PlanExecuteReview, PlanExecuteReviewConfig, Random,
-    StageRouter, StageRouterConfig, SubagentRouter, SubagentRouterConfig, TaskClassifierConfig,
-    ToolSemantics,
+    PlanExecute, PlanExecuteConfig, PlanExecuteFinalize, PlanExecuteFinalizeConfig,
+    PlanExecuteReview, PlanExecuteReviewConfig, Random, StageRouter, StageRouterConfig,
+    SubagentRouter, SubagentRouterConfig, TaskClassifierConfig, ToolSemantics,
 };
 use serde::Deserialize;
 use switchyard_protocol::{Category, ModelId};
@@ -342,6 +342,22 @@ pub enum AlgorithmSpec {
         #[serde(default)]
         planning_prompt: Option<String>,
     },
+    /// Plans and finalizes on one target, with efficient execution between them.
+    PlanExecuteFinalize {
+        /// Target used for planning and finalization.
+        planner_target: String,
+        /// Target used from the first edit until completion.
+        executor_target: String,
+        /// Replaces the built-in planning prompt.
+        #[serde(default)]
+        planning_prompt: Option<String>,
+        /// Replaces the built-in finalizer prompt.
+        #[serde(default)]
+        finalizer_prompt: Option<String>,
+        /// Replaces the completion response pattern.
+        #[serde(default)]
+        terminal_pattern: Option<String>,
+    },
     /// Plans on one target, executes on another, then reviews completion once.
     PlanExecuteReview {
         /// Target used before the first edit.
@@ -577,6 +593,11 @@ impl AlgorithmSpec {
                 executor_target,
                 ..
             } => vec![planner_target.as_str(), executor_target.as_str()],
+            Self::PlanExecuteFinalize {
+                planner_target,
+                executor_target,
+                ..
+            } => vec![planner_target.as_str(), executor_target.as_str()],
             Self::LlmClassifier { config, .. } => match config.classifier_mode() {
                 ClassifierMode::Capability => config
                     .weak_target
@@ -775,6 +796,18 @@ impl AlgorithmSpec {
                 ),
                 (Category::Judge, vec![planner_target.clone()]),
             ]),
+            Self::PlanExecuteFinalize {
+                planner_target,
+                executor_target,
+                ..
+            } => category_models([
+                (Category::Capable, vec![planner_target.clone()]),
+                (Category::Efficient, vec![executor_target.clone()]),
+                (
+                    Category::Any,
+                    vec![planner_target.clone(), executor_target.clone()],
+                ),
+            ]),
         };
 
         let subagents = match self {
@@ -817,6 +850,7 @@ impl AlgorithmSpec {
             | Self::Random { .. }
             | Self::Passthrough { .. }
             | Self::PlanExecute { .. }
+            | Self::PlanExecuteFinalize { .. }
             | Self::LlmClassifier { .. }
             | Self::StageRouter { .. }
             | Self::Auto { .. }
@@ -1291,6 +1325,33 @@ fn build_algorithm(
             let algorithm = PlanExecuteReview::new(config).map_err(|error| {
                 AlgorithmConfigError::with_source(
                     format!("plan_execute_review route {route_name}: {error}"),
+                    error,
+                )
+            })?;
+            Ok(Arc::new(algorithm))
+        }
+        AlgorithmSpec::PlanExecuteFinalize {
+            planner_target,
+            executor_target,
+            planning_prompt,
+            finalizer_prompt,
+            terminal_pattern,
+        } => {
+            resolve_target_model_id(route_name, planner_target, targets)?;
+            resolve_target_model_id(route_name, executor_target, targets)?;
+            let mut config = PlanExecuteFinalizeConfig::default();
+            if let Some(prompt) = planning_prompt {
+                config.planning_prompt = prompt.clone();
+            }
+            if let Some(prompt) = finalizer_prompt {
+                config.finalizer_prompt = prompt.clone();
+            }
+            if let Some(pattern) = terminal_pattern {
+                config.terminal_pattern = pattern.clone();
+            }
+            let algorithm = PlanExecuteFinalize::new(config).map_err(|error| {
+                AlgorithmConfigError::with_source(
+                    format!("plan_execute_finalize route {route_name}: {error}"),
                     error,
                 )
             })?;

@@ -1000,6 +1000,30 @@ planning_prompt = "   "
     }
 
     #[test]
+    fn plan_execute_finalize_route_builds_and_claims_both_targets() -> RunnerResult<()> {
+        let config = format!(
+            r#"{VALID_CONFIG}
+
+[routes.finalize]
+id = "switchyard/plan-execute-finalize"
+type = "plan_execute_finalize"
+planner_target = "strong"
+executor_target = "weak"
+planning_prompt = "Inspect and plan before editing."
+finalizer_prompt = "Inspect, test, and repair the completed work."
+"#
+        );
+        let runner = runner_from_toml(&config)?;
+
+        assert!(
+            runner
+                .models()
+                .any(|model| model.id.as_str() == "switchyard/plan-execute-finalize")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn plan_execute_review_route_builds_with_tuned_prompts() -> RunnerResult<()> {
         let config = format!(
             r#"{VALID_CONFIG}

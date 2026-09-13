@@ -52,7 +52,7 @@ mod telemetry;
 mod tests;
 mod transcript;
 mod trigger;
-mod turn;
+pub(super) mod turn;
 
 use budget::{ReviewBudget, ScopeKey, budget_scope, stall_key};
 use signals::{GateSignalProcessor, GateSignals};
@@ -802,7 +802,7 @@ fn raw_item_is_mutation(item: &serde_json::Value) -> bool {
     )
 }
 
-fn response_message(response: &AggLlmResponse, fallback: &str) -> Message {
+pub(super) fn response_message(response: &AggLlmResponse, fallback: &str) -> Message {
     let content = response
         .outputs
         .iter()
@@ -820,7 +820,7 @@ fn response_message(response: &AggLlmResponse, fallback: &str) -> Message {
     }
 }
 
-fn extend_exact_responses_turn(
+pub(super) fn extend_exact_responses_turn(
     request: &mut Request,
     response: &AggLlmResponse,
     user_text: &str,

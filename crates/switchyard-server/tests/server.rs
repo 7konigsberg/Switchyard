@@ -1636,6 +1636,195 @@ planning_prompt = "{PLANNING_PROMPT}"
     Ok(())
 }
 
+// The capable finalizer must receive tools and keep control after using one.
+#[tokio::test]
+async fn plan_execute_finalize_returns_live_tool_control_to_capable() -> TestResult {
+    const PLANNING_PROMPT: &str = "Inspect and plan before editing.";
+    const FINALIZER_PROMPT: &str = "Inspect the live repository, test, and repair the work.";
+    let upstream = MockUpstream::start().await?;
+    let state = load_test_config(&format!(
+        r#"
+schema_version = 1
+
+[llm_clients.upstream]
+format = "openai_responses"
+base_url = "{base_url}"
+
+[targets.planner]
+id = "model/planner"
+llm_client = "upstream"
+
+[targets.executor]
+id = "model/executor"
+llm_client = "upstream"
+
+[routes.finalize]
+id = "switchyard/plan-execute-finalize"
+type = "plan_execute_finalize"
+planner_target = "planner"
+executor_target = "executor"
+planning_prompt = "{PLANNING_PROMPT}"
+finalizer_prompt = "{FINALIZER_PROMPT}"
+"#,
+        base_url = upstream.base_url
+    ))?;
+    let app = build_switchyard_router(state);
+    let headers = [("x-switchyard-session-id", "finalizer-session")];
+    let tools = json!([{
+        "type": "function",
+        "name": "exec_command",
+        "description": "Run a shell command",
+        "parameters": {"type": "object"}
+    }]);
+
+    let planning = send_with_headers(
+        &app,
+        "POST",
+        "/v1/responses",
+        Some(json!({
+            "model": "switchyard/plan-execute-finalize",
+            "instructions": "Keep public APIs stable.",
+            "input": "complete-task",
+            "tools": tools
+        })),
+        &headers,
+    )
+    .await?;
+    assert_eq!(planning.status, StatusCode::OK, "{}", planning.text()?);
+
+    let execution = send_with_headers(
+        &app,
+        "POST",
+        "/v1/responses",
+        Some(json!({
+            "model": "switchyard/plan-execute-finalize",
+            "instructions": "Keep public APIs stable.",
+            "input": [
+                {"type": "message", "role": "user", "content": "complete-task"},
+                {"type": "message", "role": "assistant", "content": "Plan complete"},
+                {
+                    "type": "function_call",
+                    "call_id": "edit-1",
+                    "name": "apply_patch",
+                    "arguments": "{\"patch\":\"change\"}"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "edit-1",
+                    "output": "updated"
+                }
+            ],
+            "tools": tools,
+            "stream": true
+        })),
+        &headers,
+    )
+    .await?;
+    assert_eq!(execution.status, StatusCode::OK, "{}", execution.text()?);
+    assert_eq!(
+        execution
+            .headers
+            .get("x-model-router-selected-model")
+            .and_then(|value| value.to_str().ok()),
+        Some("model/planner")
+    );
+
+    let continuation = send_with_headers(
+        &app,
+        "POST",
+        "/v1/responses",
+        Some(json!({
+            "model": "switchyard/plan-execute-finalize",
+            "instructions": "Keep public APIs stable.",
+            "input": [
+                {"type": "message", "role": "user", "content": "complete-task"},
+                {
+                    "type": "function_call",
+                    "call_id": "edit-1",
+                    "name": "apply_patch",
+                    "arguments": "{\"patch\":\"change\"}"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "edit-1",
+                    "output": "updated"
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "finalizer-test",
+                    "name": "exec_command",
+                    "arguments": "{\"cmd\":\"git diff && cargo test\"}"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "finalizer-test",
+                    "output": "tests pass"
+                }
+            ],
+            "tools": tools
+        })),
+        &headers,
+    )
+    .await?;
+    assert_eq!(
+        continuation.status,
+        StatusCode::OK,
+        "{}",
+        continuation.text()?
+    );
+    assert_eq!(
+        continuation
+            .headers
+            .get("x-model-router-selected-model")
+            .and_then(|value| value.to_str().ok()),
+        Some("model/planner")
+    );
+
+    let calls = upstream.calls.lock().await;
+    assert_eq!(
+        calls
+            .iter()
+            .map(|call| call["model"].as_str().unwrap_or_default())
+            .collect::<Vec<_>>(),
+        vec![
+            "model/planner",
+            "model/executor",
+            "model/planner",
+            "model/planner"
+        ]
+    );
+    let finalizer = &calls[2];
+    assert!(
+        finalizer["instructions"]
+            .to_string()
+            .contains(PLANNING_PROMPT)
+    );
+    assert!(
+        finalizer["instructions"]
+            .to_string()
+            .contains(FINALIZER_PROMPT)
+    );
+    assert!(
+        finalizer["input"]
+            .to_string()
+            .contains("Completed the task")
+    );
+    assert!(
+        finalizer["input"]
+            .to_string()
+            .contains("opaque-completion-reasoning")
+    );
+    assert_eq!(finalizer["tools"], tools);
+    assert_ne!(finalizer["tool_choice"], "none");
+    assert!(
+        calls[3]["instructions"]
+            .to_string()
+            .contains(FINALIZER_PROMPT)
+    );
+    assert_eq!(calls[3]["tools"], tools);
+    Ok(())
+}
+
 #[tokio::test]
 async fn plan_execute_review_reuses_executor_responses_context() -> TestResult {
     let _metrics_guard = ADVISOR_REDO_METRICS_LOCK.lock().await;
