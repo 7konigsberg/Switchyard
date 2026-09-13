@@ -1325,6 +1325,7 @@ confidence_threshold = 0.5
 #[tokio::test]
 async fn plan_execute_route_hands_off_after_the_first_edit() -> TestResult {
     const PLANNING_PROMPT: &str = "Inspect first and make a concrete plan before editing.";
+    const EXECUTION_PROMPT: &str = "Follow PLAN_COMPLETE and document every deviation.";
     let upstream = MockUpstream::start().await?;
     let state = load_test_config(&format!(
         r#"
@@ -1348,6 +1349,7 @@ type = "plan_execute"
 capable_target = "capable"
 efficient_target = "efficient"
 planning_prompt = "{PLANNING_PROMPT}"
+execution_prompt = "{EXECUTION_PROMPT}"
 "#,
         base_url = upstream.base_url
     ))?;
@@ -1382,7 +1384,7 @@ planning_prompt = "{PLANNING_PROMPT}"
             "instructions": "Keep the public API stable.",
             "input": [
                 {"type": "message", "role": "user", "content": "Fix the parser."},
-                {"type": "message", "role": "assistant", "content": "The plan is ready."},
+                {"type": "message", "role": "assistant", "content": "PLAN_COMPLETE\n1. Update the parser and validate it."},
                 {
                     "type": "function_call",
                     "call_id": "call-edit",
@@ -1406,6 +1408,11 @@ planning_prompt = "{PLANNING_PROMPT}"
             .and_then(|value| value.to_str().ok()),
         Some("model/efficient")
     );
+    let calls = upstream.calls.lock().await;
+    assert!(has_system_prompt(&calls[0], PLANNING_PROMPT));
+    assert!(has_system_prompt(&calls[1], EXECUTION_PROMPT));
+    assert!(calls[1].to_string().contains("PLAN_COMPLETE"));
+    drop(calls);
 
     let chat_execution = send(
         &app,
@@ -1514,7 +1521,7 @@ planning_prompt = "{PLANNING_PROMPT}"
     assert!(
         calls[1]["messages"]
             .to_string()
-            .contains("The plan is ready."),
+            .contains("PLAN_COMPLETE"),
         "the efficient model must inherit the pre-edit trajectory"
     );
     Ok(())

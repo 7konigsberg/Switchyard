@@ -896,6 +896,7 @@ type = "plan_execute"
 capable_target = "strong"
 efficient_target = "weak"
 planning_prompt = "Inspect and plan before editing."
+execution_prompt = "Follow the plan and document deviations."
 "#
         );
         let runner = runner_from_toml(&config)?;
@@ -923,6 +924,23 @@ planning_prompt = "   "
         );
 
         assert!(error_message(&config).contains("planning_prompt must not be empty"));
+    }
+
+    #[test]
+    fn plan_execute_route_rejects_an_empty_execution_prompt() {
+        let config = format!(
+            r#"{VALID_CONFIG}
+
+[routes.plan_execute]
+id = "switchyard/plan-execute"
+type = "plan_execute"
+capable_target = "strong"
+efficient_target = "weak"
+execution_prompt = "   "
+"#
+        );
+
+        assert!(error_message(&config).contains("execution_prompt must not be empty"));
     }
 
     #[test]

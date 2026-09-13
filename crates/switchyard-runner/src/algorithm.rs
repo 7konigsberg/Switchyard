@@ -250,6 +250,9 @@ pub enum AlgorithmSpec {
         /// Replaces the built-in planning system prompt.
         #[serde(default)]
         planning_prompt: Option<String>,
+        /// Replaces the built-in execution system prompt.
+        #[serde(default)]
+        execution_prompt: Option<String>,
     },
     /// Asks a judge model which target should serve the request.
     LlmClassifier {
@@ -930,12 +933,16 @@ fn build_algorithm(
             capable_target,
             efficient_target,
             planning_prompt,
+            execution_prompt,
         } => {
             let capable = resolve_target_model_id(route_name, capable_target, targets)?;
             let efficient = resolve_target_model_id(route_name, efficient_target, targets)?;
             let mut config = PlanExecuteConfig::default();
             if let Some(prompt) = planning_prompt {
                 config.planning_prompt = prompt.clone();
+            }
+            if let Some(prompt) = execution_prompt {
+                config.execution_prompt = prompt.clone();
             }
             let algorithm = PlanExecute::new(capable, efficient, config).map_err(|error| {
                 AlgorithmConfigError::with_source(

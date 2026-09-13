@@ -19,6 +19,10 @@ use crate::{LibsyError, Result, RoutingOutcome};
 pub const DEFAULT_PLANNING_PROMPT: &str =
     include_str!("../prompts/plan-execute/planning-system-prompt.md");
 
+/// Default instruction prepended while the efficient model executes the plan.
+pub const DEFAULT_EXECUTION_PROMPT: &str =
+    include_str!("../prompts/plan-execute/execution-system-prompt.md");
+
 /// Maximum session latches retained by one router instance.
 const MAX_EXECUTING_SESSIONS: usize = 4_096;
 
@@ -27,12 +31,15 @@ const MAX_EXECUTING_SESSIONS: usize = 4_096;
 pub struct PlanExecuteConfig {
     /// System instruction prepended until the first edit or write tool call.
     pub planning_prompt: String,
+    /// System instruction prepended after the first edit or write tool call.
+    pub execution_prompt: String,
 }
 
 impl Default for PlanExecuteConfig {
     fn default() -> Self {
         Self {
             planning_prompt: DEFAULT_PLANNING_PROMPT.trim().to_string(),
+            execution_prompt: DEFAULT_EXECUTION_PROMPT.trim().to_string(),
         }
     }
 }
@@ -42,7 +49,7 @@ impl Default for PlanExecuteConfig {
 pub struct PlanExecute {
     capable: ModelId,
     efficient: ModelId,
-    planning_prompt: SystemPromptProcessor,
+    phase_prompts: SystemPromptProcessor,
     executing_sessions: Mutex<HashSet<RoutingIdentity>>,
 }
 
@@ -56,13 +63,20 @@ impl PlanExecute {
                 message: "planning_prompt must not be empty".to_string(),
             });
         }
-        let planning_prompt = SystemPromptProcessor::new(
-            TargetPrompts::default().with(capable.clone(), config.planning_prompt),
+        if config.execution_prompt.trim().is_empty() {
+            return Err(LibsyError::AlgorithmError {
+                message: "execution_prompt must not be empty".to_string(),
+            });
+        }
+        let phase_prompts = SystemPromptProcessor::new(
+            TargetPrompts::default()
+                .with(capable.clone(), config.planning_prompt)
+                .with(efficient.clone(), config.execution_prompt),
         );
         Ok(Self {
             capable,
             efficient,
-            planning_prompt,
+            phase_prompts,
             executing_sessions: Mutex::new(HashSet::new()),
         })
     }
@@ -112,6 +126,15 @@ impl Algorithm for PlanExecute {
         mut request: Request,
     ) -> Result<RoutingOutcome> {
         if self.is_executing(&request) {
+            self.phase_prompts
+                .process(
+                    &mut (),
+                    Event::Decision {
+                        request: &mut request,
+                        selected_model_id: &self.efficient,
+                    },
+                )
+                .await?;
             tracing::info!(target = %self.efficient, phase = "execute", "plan-execute selected target");
             Ok(RoutingOutcome::route_to(
                 self.efficient.clone(),
@@ -119,7 +142,7 @@ impl Algorithm for PlanExecute {
                 request,
             ))
         } else {
-            self.planning_prompt
+            self.phase_prompts
                 .process(
                     &mut (),
                     Event::Decision {
@@ -262,8 +285,15 @@ mod tests {
 
         assert_eq!(selected, "model/efficient");
         assert_eq!(routed.llm_request.messages, messages);
-        assert_eq!(routed.llm_request.instructions.len(), 1);
-        assert_eq!(routed.llm_request.instructions[0].role, Role::Developer);
+        assert_eq!(routed.llm_request.instructions.len(), 2);
+        assert_eq!(routed.llm_request.instructions[0].role, Role::System);
+        assert_eq!(
+            routed.llm_request.instructions[0].content,
+            vec![ContentBlock::Text {
+                text: DEFAULT_EXECUTION_PROMPT.trim().to_string()
+            }]
+        );
+        assert_eq!(routed.llm_request.instructions[1].role, Role::Developer);
     }
 
     #[tokio::test]
@@ -276,7 +306,8 @@ mod tests {
         let (selected, routed) = route_and_capture(algorithm(), request(messages, None)).await;
 
         assert_eq!(selected, "model/efficient");
-        assert!(routed.llm_request.instructions.is_empty());
+        assert_eq!(routed.llm_request.instructions.len(), 1);
+        assert_eq!(routed.llm_request.instructions[0].role, Role::System);
     }
 
     #[tokio::test]
@@ -289,7 +320,8 @@ mod tests {
         let (selected, routed) = route_and_capture(algorithm(), request(messages, None)).await;
 
         assert_eq!(selected, "model/efficient");
-        assert!(routed.llm_request.instructions.is_empty());
+        assert_eq!(routed.llm_request.instructions.len(), 1);
+        assert_eq!(routed.llm_request.instructions[0].role, Role::System);
     }
 
     #[tokio::test]
@@ -312,7 +344,8 @@ mod tests {
         let (selected, routed) = route_and_capture(algorithm, compacted).await;
 
         assert_eq!(selected, "model/efficient");
-        assert!(routed.llm_request.instructions.is_empty());
+        assert_eq!(routed.llm_request.instructions.len(), 1);
+        assert_eq!(routed.llm_request.instructions[0].role, Role::System);
     }
 
     #[tokio::test]
@@ -346,6 +379,21 @@ mod tests {
             ModelId::from("model/efficient"),
             PlanExecuteConfig {
                 planning_prompt: "  ".to_string(),
+                ..PlanExecuteConfig::default()
+            },
+        );
+
+        assert!(matches!(result, Err(LibsyError::AlgorithmError { .. })));
+    }
+
+    #[test]
+    fn empty_execution_prompt_is_rejected() {
+        let result = PlanExecute::new(
+            ModelId::from("model/capable"),
+            ModelId::from("model/efficient"),
+            PlanExecuteConfig {
+                execution_prompt: "  ".to_string(),
+                ..PlanExecuteConfig::default()
             },
         );
 
