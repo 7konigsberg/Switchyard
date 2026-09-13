@@ -341,8 +341,11 @@ pub enum AlgorithmSpec {
         /// Replaces the built-in planning system prompt.
         #[serde(default)]
         planning_prompt: Option<String>,
+        /// Replaces the built-in execution system prompt.
+        #[serde(default)]
+        execution_prompt: Option<String>,
     },
-    /// Plans on one target, executes on another, then reviews completion once.
+    /// Plans on one target, executes on another, then reviews completed turns.
     PlanExecuteReview {
         /// Target used before the first edit.
         planner_target: String,
@@ -351,6 +354,9 @@ pub enum AlgorithmSpec {
         /// Replaces the built-in planning prompt.
         #[serde(default)]
         planning_prompt: Option<String>,
+        /// Replaces the built-in execution prompt.
+        #[serde(default)]
+        execution_prompt: Option<String>,
         /// Replaces the built-in reviewer prompt.
         #[serde(default)]
         reviewer_prompt: Option<String>,
@@ -363,6 +369,9 @@ pub enum AlgorithmSpec {
         /// Most output tokens one review may use on wires that accept the field.
         #[serde(default = "default_advisor_max_tokens")]
         reviewer_max_tokens: u64,
+        /// Maximum number of completed turns the reviewer may reopen.
+        #[serde(default = "default_max_reviews")]
+        max_reviews: u32,
         /// Lets the completion through when the reviewer fails.
         #[serde(default = "default_fail_open")]
         fail_open: bool,
@@ -1246,12 +1255,16 @@ fn build_algorithm(
             capable_target,
             efficient_target,
             planning_prompt,
+            execution_prompt,
         } => {
             resolve_target_model_id(route_name, capable_target, targets)?;
             resolve_target_model_id(route_name, efficient_target, targets)?;
             let mut config = PlanExecuteConfig::default();
             if let Some(prompt) = planning_prompt {
                 config.planning_prompt = prompt.clone();
+            }
+            if let Some(prompt) = execution_prompt {
+                config.execution_prompt = prompt.clone();
             }
             let algorithm = PlanExecute::new(config).map_err(|error| {
                 AlgorithmConfigError::with_source(
@@ -1265,10 +1278,12 @@ fn build_algorithm(
             planner_target,
             executor_target,
             planning_prompt,
+            execution_prompt,
             reviewer_prompt,
             redo_feedback_prefix,
             terminal_pattern,
             reviewer_max_tokens,
+            max_reviews,
             fail_open,
         } => {
             resolve_target_model_id(route_name, planner_target, targets)?;
@@ -1276,6 +1291,9 @@ fn build_algorithm(
             let mut config = PlanExecuteReviewConfig::default();
             if let Some(prompt) = planning_prompt {
                 config.planning_prompt = prompt.clone();
+            }
+            if let Some(prompt) = execution_prompt {
+                config.execution_prompt = prompt.clone();
             }
             if let Some(prompt) = reviewer_prompt {
                 config.reviewer_prompt = prompt.clone();
@@ -1287,6 +1305,7 @@ fn build_algorithm(
                 config.terminal_pattern = pattern.clone();
             }
             config.reviewer_max_tokens = *reviewer_max_tokens;
+            config.max_reviews = *max_reviews;
             config.fail_open = *fail_open;
             let algorithm = PlanExecuteReview::new(config).map_err(|error| {
                 AlgorithmConfigError::with_source(

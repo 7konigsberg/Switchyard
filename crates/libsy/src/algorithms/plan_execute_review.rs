@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Plans on one model, executes on another, then reviews the completion once.
+//! Plans on one model, executes on another, then reviews completed work.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -10,7 +10,7 @@ use parking_lot::Mutex;
 use switchyard_protocol::{Category, ContentBlock, Message, Request, WireFormat};
 
 use super::advisor_gate::{AdvisorGate, AdvisorGateConfig, GateTrigger, ReviewContext};
-use super::plan_execute::{DEFAULT_PLANNING_PROMPT, ExecutionTracker};
+use super::plan_execute::{DEFAULT_EXECUTION_PROMPT, DEFAULT_PLANNING_PROMPT, ExecutionTracker};
 use super::util::prompts::prepend_system_prompt;
 use super::util::tool_signals::is_mutating_tool_call;
 use crate::core::algorithm::{Algorithm, Driver, RoutingIdentity};
@@ -35,6 +35,8 @@ const MAX_PLANNER_CHECKPOINTS: usize = 4_096;
 pub struct PlanExecuteReviewConfig {
     /// System instruction prepended while the planner owns the session.
     pub planning_prompt: String,
+    /// System instruction prepended while the executor owns the session.
+    pub execution_prompt: String,
     /// Request appended when the reviewer examines the completion.
     pub reviewer_prompt: String,
     /// Prepended to REDO feedback before execution resumes.
@@ -43,6 +45,8 @@ pub struct PlanExecuteReviewConfig {
     pub terminal_pattern: String,
     /// Maximum output tokens for the review call.
     pub reviewer_max_tokens: u64,
+    /// Maximum number of completed turns the reviewer may reopen.
+    pub max_reviews: u32,
     /// Lets the completion through when the review call fails.
     pub fail_open: bool,
 }
@@ -51,18 +55,21 @@ impl Default for PlanExecuteReviewConfig {
     fn default() -> Self {
         Self {
             planning_prompt: DEFAULT_PLANNING_PROMPT.trim().to_string(),
+            execution_prompt: DEFAULT_EXECUTION_PROMPT.trim().to_string(),
             reviewer_prompt: DEFAULT_REVIEWER_PROMPT.trim().to_string(),
             redo_feedback_prefix: DEFAULT_REDO_FEEDBACK_PREFIX.trim().to_string() + "\n",
             terminal_pattern: DEFAULT_TERMINAL_PATTERN.to_string(),
             reviewer_max_tokens: 2048,
+            max_reviews: 1,
             fail_open: true,
         }
     }
 }
 
-/// Plan and execute router with one planner-aware terminal review.
+/// Plan and execute router with planner-aware terminal review.
 pub struct PlanExecuteReview {
     planning_prompt: String,
+    execution_prompt: String,
     phase: ExecutionTracker,
     review_gate: Arc<AdvisorGate>,
     planner_checkpoints: Mutex<HashMap<RoutingIdentity, PlannerCheckpoint>>,
@@ -88,6 +95,11 @@ impl PlanExecuteReview {
                 message: "reviewer_prompt must not be empty".to_string(),
             });
         }
+        if config.execution_prompt.trim().is_empty() {
+            return Err(LibsyError::AlgorithmError {
+                message: "execution_prompt must not be empty".to_string(),
+            });
+        }
         let planning_prompt_text = config.planning_prompt.clone();
         let gate_config = AdvisorGateConfig {
             reviewer_system_prompt: config.reviewer_prompt,
@@ -96,7 +108,7 @@ impl PlanExecuteReview {
             review_context: ReviewContext::ExecutionDelta,
             gate_trigger: GateTrigger::Pattern(config.terminal_pattern),
             gate_require_no_tool_call: true,
-            max_reviews: 1,
+            max_reviews: config.max_reviews,
             gate_stall_turns: 0,
             advisor_max_tokens: config.reviewer_max_tokens,
             fail_open: config.fail_open,
@@ -106,6 +118,7 @@ impl PlanExecuteReview {
 
         Ok(Self {
             planning_prompt: planning_prompt_text,
+            execution_prompt: config.execution_prompt,
             phase: ExecutionTracker::new(),
             review_gate,
             planner_checkpoints: Mutex::new(HashMap::new()),
@@ -114,7 +127,9 @@ impl PlanExecuteReview {
 
     /// Returns the live conversation or restores its saved handoff after compaction.
     fn review_base(&self, request: &Request) -> Option<Request> {
-        let identity = RoutingIdentity::from_request(request)?;
+        let Some(identity) = RoutingIdentity::from_request(request) else {
+            return Some(request.clone());
+        };
         let request_has_mutation = request
             .llm_request
             .messages
@@ -168,6 +183,7 @@ impl Algorithm for PlanExecuteReview {
                 .and_then(|metadata| metadata.session_final)
                 == Some(true);
             let review_base = self.review_base(&request);
+            prepend_system_prompt(&mut request, &self.execution_prompt);
             let result = Arc::clone(&self.review_gate)
                 .route_with_review_base(driver, request.clone(), review_base)
                 .await;
@@ -552,6 +568,64 @@ mod tests {
                 .and_then(|message| message.text_content("\n"))
                 .expect("redo feedback")
                 .contains("First reproduce the concern")
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_review_budget_applies_to_later_completed_turns() {
+        let algorithm: Arc<dyn Algorithm> = Arc::new(
+            PlanExecuteReview::new(PlanExecuteReviewConfig {
+                max_reviews: 2,
+                ..PlanExecuteReviewConfig::default()
+            })
+            .expect("config is valid"),
+        );
+        let edit = Message {
+            role: Role::Assistant,
+            content: vec![ContentBlock::ToolCall(ToolCall {
+                id: "edit-1".to_string(),
+                name: "apply_patch".to_string(),
+                arguments: serde_json::json!({"patch": "change"}),
+            })],
+        };
+        let calls = Arc::new(Mutex::new(Vec::new()));
+
+        for attempt in 0..3 {
+            let captured = Arc::clone(&calls);
+            test_drive_with_models(
+                Arc::clone(&algorithm),
+                request(vec![
+                    Message::text(Role::User, "fix it"),
+                    edit.clone(),
+                    Message::text(Role::User, format!("tool result {attempt}")),
+                ]),
+                review_models(),
+                move |model: ModelId, request: Request| {
+                    captured
+                        .lock()
+                        .expect("call log is available")
+                        .push(model.to_string());
+                    let is_review = request.llm_request.messages.last().is_some_and(|message| {
+                        message.text_content("\n").is_some_and(|text| {
+                            text.contains("Review Luna's completed coding task")
+                        })
+                    });
+                    async move {
+                        if is_review {
+                            Ok(reply("APPROVE"))
+                        } else {
+                            Ok(reply("Completed the task"))
+                        }
+                    }
+                },
+            )
+            .await
+            .expect("execution routes");
+        }
+
+        assert_eq!(
+            *calls.lock().expect("call log is available"),
+            vec!["executor", "planner", "executor", "planner", "executor"]
         );
     }
 

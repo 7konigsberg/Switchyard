@@ -25,7 +25,9 @@ pub use algorithms::llm_class::{
 };
 pub use algorithms::noop::Noop;
 pub use algorithms::passthrough::Passthrough;
-pub use algorithms::plan_execute::{DEFAULT_PLANNING_PROMPT, PlanExecute, PlanExecuteConfig};
+pub use algorithms::plan_execute::{
+    DEFAULT_EXECUTION_PROMPT, DEFAULT_PLANNING_PROMPT, PlanExecute, PlanExecuteConfig,
+};
 pub use algorithms::plan_execute_review::{
     DEFAULT_REDO_FEEDBACK_PREFIX, DEFAULT_REVIEWER_PROMPT, DEFAULT_TERMINAL_PATTERN,
     PlanExecuteReview, PlanExecuteReviewConfig,

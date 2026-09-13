@@ -1000,6 +1000,23 @@ planning_prompt = "   "
     }
 
     #[test]
+    fn plan_execute_route_rejects_an_empty_execution_prompt() {
+        let config = format!(
+            r#"{VALID_CONFIG}
+
+[routes.plan_execute]
+id = "switchyard/plan-execute"
+type = "plan_execute"
+capable_target = "strong"
+efficient_target = "weak"
+execution_prompt = "   "
+"#
+        );
+
+        assert!(error_message(&config).contains("execution_prompt must not be empty"));
+    }
+
+    #[test]
     fn plan_execute_review_route_builds_with_tuned_prompts() -> RunnerResult<()> {
         let config = format!(
             r#"{VALID_CONFIG}
@@ -1010,10 +1027,12 @@ type = "plan_execute_review"
 planner_target = "strong"
 executor_target = "weak"
 planning_prompt = "Inspect and plan before editing."
+execution_prompt = "Follow the plan and report deviations."
 reviewer_prompt = "Review the completion and reply APPROVE or REDO."
 redo_feedback_prefix = "Continue with this feedback: "
 terminal_pattern = '(?i)^completed'
 reviewer_max_tokens = 1024
+max_reviews = 3
 fail_open = false
 "#
         );
@@ -1025,6 +1044,23 @@ fail_open = false
                 .any(|model| model.id.as_str() == "switchyard/plan-execute-review")
         );
         Ok(())
+    }
+
+    #[test]
+    fn plan_execute_review_rejects_zero_max_reviews() {
+        let config = format!(
+            r#"{VALID_CONFIG}
+
+[routes.plan_execute_review]
+id = "switchyard/plan-execute-review"
+type = "plan_execute_review"
+planner_target = "strong"
+executor_target = "weak"
+max_reviews = 0
+"#
+        );
+
+        assert!(error_message(&config).contains("max_reviews must be at least 1"));
     }
 
     #[test]

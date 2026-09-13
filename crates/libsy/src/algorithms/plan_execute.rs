@@ -18,6 +18,10 @@ use crate::{LibsyError, Result, RoutingOutcome};
 pub const DEFAULT_PLANNING_PROMPT: &str =
     include_str!("../prompts/plan-execute/planning-system-prompt.md");
 
+/// Default instruction prepended while the efficient model executes the plan.
+pub const DEFAULT_EXECUTION_PROMPT: &str =
+    include_str!("../prompts/plan-execute/execution-system-prompt.md");
+
 /// Maximum session latches retained by one router instance.
 const MAX_EXECUTING_SESSIONS: usize = 4_096;
 
@@ -26,12 +30,15 @@ const MAX_EXECUTING_SESSIONS: usize = 4_096;
 pub struct PlanExecuteConfig {
     /// System instruction prepended until the first edit or write tool call.
     pub planning_prompt: String,
+    /// System instruction prepended after the first edit or write tool call.
+    pub execution_prompt: String,
 }
 
 impl Default for PlanExecuteConfig {
     fn default() -> Self {
         Self {
             planning_prompt: DEFAULT_PLANNING_PROMPT.trim().to_string(),
+            execution_prompt: DEFAULT_EXECUTION_PROMPT.trim().to_string(),
         }
     }
 }
@@ -40,6 +47,7 @@ impl Default for PlanExecuteConfig {
 /// to an efficient model while preserving the caller's full trajectory.
 pub struct PlanExecute {
     planning_prompt: String,
+    execution_prompt: String,
     phase: ExecutionTracker,
 }
 
@@ -98,8 +106,14 @@ impl PlanExecute {
                 message: "planning_prompt must not be empty".to_string(),
             });
         }
+        if config.execution_prompt.trim().is_empty() {
+            return Err(LibsyError::AlgorithmError {
+                message: "execution_prompt must not be empty".to_string(),
+            });
+        }
         Ok(Self {
             planning_prompt: config.planning_prompt,
+            execution_prompt: config.execution_prompt,
             phase: ExecutionTracker::new(),
         })
     }
@@ -117,6 +131,7 @@ impl Algorithm for PlanExecute {
         mut request: Request,
     ) -> Result<RoutingOutcome> {
         let (category, phase) = if self.phase.is_executing(&request) {
+            prepend_system_prompt(&mut request, &self.execution_prompt);
             (Category::Efficient, "execute")
         } else {
             prepend_system_prompt(&mut request, &self.planning_prompt);
@@ -273,8 +288,15 @@ mod tests {
 
         assert_eq!(selected, "model/efficient");
         assert_eq!(routed.llm_request.messages, messages);
-        assert_eq!(routed.llm_request.instructions.len(), 1);
-        assert_eq!(routed.llm_request.instructions[0].role, Role::Developer);
+        assert_eq!(routed.llm_request.instructions.len(), 2);
+        assert_eq!(routed.llm_request.instructions[0].role, Role::System);
+        assert_eq!(
+            routed.llm_request.instructions[0].content,
+            vec![ContentBlock::Text {
+                text: DEFAULT_EXECUTION_PROMPT.trim().to_string()
+            }]
+        );
+        assert_eq!(routed.llm_request.instructions[1].role, Role::Developer);
     }
 
     #[tokio::test]
@@ -287,7 +309,7 @@ mod tests {
         let (selected, routed) = route_and_capture(algorithm(), request(messages, None)).await;
 
         assert_eq!(selected, "model/efficient");
-        assert!(routed.llm_request.instructions.is_empty());
+        assert_eq!(routed.llm_request.instructions.len(), 1);
     }
 
     #[tokio::test]
@@ -300,7 +322,7 @@ mod tests {
         let (selected, routed) = route_and_capture(algorithm(), request(messages, None)).await;
 
         assert_eq!(selected, "model/efficient");
-        assert!(routed.llm_request.instructions.is_empty());
+        assert_eq!(routed.llm_request.instructions.len(), 1);
     }
 
     #[tokio::test]
@@ -323,7 +345,7 @@ mod tests {
         let (selected, routed) = route_and_capture(algorithm, compacted).await;
 
         assert_eq!(selected, "model/efficient");
-        assert!(routed.llm_request.instructions.is_empty());
+        assert_eq!(routed.llm_request.instructions.len(), 1);
     }
 
     #[tokio::test]
@@ -354,6 +376,17 @@ mod tests {
     fn empty_planning_prompt_is_rejected() {
         let result = PlanExecute::new(PlanExecuteConfig {
             planning_prompt: "  ".to_string(),
+            ..PlanExecuteConfig::default()
+        });
+
+        assert!(matches!(result, Err(LibsyError::AlgorithmError { .. })));
+    }
+
+    #[test]
+    fn empty_execution_prompt_is_rejected() {
+        let result = PlanExecute::new(PlanExecuteConfig {
+            execution_prompt: "  ".to_string(),
+            ..PlanExecuteConfig::default()
         });
 
         assert!(matches!(result, Err(LibsyError::AlgorithmError { .. })));
