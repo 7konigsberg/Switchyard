@@ -5,12 +5,13 @@
 //!
 //! These helpers mutate the normalized request. A codec asked to encode for the format the
 //! request arrived in replays the body captured at decode instead of reading that
-//! request — so an addition that leaves exact replay in place never reaches the
-//! model. This is not enforced: a future processor that mutates the request and
-//! forgets the call reintroduces SWITCH-1224, silently and without a failing
-//! test.
+//! request, so an addition that leaves exact replay unchanged never reaches the
+//! model. Prompt injection updates preserved Responses requests in place and
+//! otherwise disables exact replay.
 
-use switchyard_protocol::{ContentBlock, InstructionBlock, Message, Request, Role};
+use switchyard_protocol::{
+    ContentBlock, FormatId, InstructionBlock, Message, Request, Role, WireFormat,
+};
 
 /// Appends `note` to the request as conversation text.
 ///
@@ -51,7 +52,7 @@ pub(crate) fn drop_exact_replay(request: &mut Request) {
     request.llm_request.preservation.requests.clear();
 }
 
-/// Prepends a system prompt and disables exact replay so the edit reaches the provider.
+/// Prepends a system prompt while preserving exact Responses history when possible.
 pub(crate) fn prepend_system_prompt(request: &mut Request, prompt: &str) {
     request.llm_request.instructions.insert(
         0,
@@ -62,7 +63,47 @@ pub(crate) fn prepend_system_prompt(request: &mut Request, prompt: &str) {
             }],
         },
     );
-    drop_exact_replay(request);
+    if !prepend_exact_responses_instructions(request, prompt) {
+        drop_exact_replay(request);
+    }
+}
+
+/// Updates preserved Responses instructions without rebuilding opaque input items.
+fn prepend_exact_responses_instructions(request: &mut Request, prompt: &str) -> bool {
+    let format = FormatId::known(WireFormat::OpenAiResponses);
+    let Some(body) = request
+        .llm_request
+        .preservation
+        .requests
+        .get_mut(&format)
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return false;
+    };
+    let existing = match body.get("instructions") {
+        None | Some(serde_json::Value::Null) => "",
+        Some(value) => match value.as_str() {
+            Some(value) => value,
+            None => return false,
+        },
+    };
+    let instructions = if existing == prompt || existing.starts_with(&format!("{prompt}\n\n")) {
+        existing.to_string()
+    } else if existing.is_empty() {
+        prompt.to_string()
+    } else {
+        format!("{prompt}\n\n{existing}")
+    };
+    body.insert(
+        "instructions".to_string(),
+        serde_json::Value::String(instructions),
+    );
+    request
+        .llm_request
+        .preservation
+        .requests
+        .retain(|candidate, _| candidate == &format);
+    true
 }
 
 #[cfg(test)]
@@ -166,5 +207,42 @@ mod tests {
             !replays_exactly(&request),
             "a same-format hop would replay the body captured before the note"
         );
+    }
+
+    #[test]
+    fn a_system_prompt_preserves_exact_responses_input() {
+        let format = FormatId::known(WireFormat::OpenAiResponses);
+        let input = serde_json::json!([
+            {
+                "type": "reasoning",
+                "id": "rs_1",
+                "encrypted_content": "opaque"
+            },
+            {
+                "type": "message",
+                "role": "user",
+                "content": "continue"
+            }
+        ]);
+        let mut request = Request::default();
+        request.llm_request.preservation.requests.insert(
+            format.clone(),
+            serde_json::json!({
+                "model": "model/efficient",
+                "instructions": "Keep public APIs stable.",
+                "input": input
+            }),
+        );
+
+        prepend_system_prompt(&mut request, "Follow the implementation contract.");
+        prepend_system_prompt(&mut request, "Follow the implementation contract.");
+
+        let body = &request.llm_request.preservation.requests[&format];
+        assert_eq!(
+            body["instructions"],
+            "Follow the implementation contract.\n\nKeep public APIs stable."
+        );
+        assert_eq!(body["input"], input);
+        assert_eq!(request.llm_request.preservation.requests.len(), 1);
     }
 }
