@@ -17,7 +17,7 @@ use crate::core::algorithm::{Algorithm, Driver, RoutingIdentity};
 use crate::{LibsyError, Result, RoutingOutcome};
 
 /// Terminal response pattern validated against Codex DeepSWE trajectories.
-pub const DEFAULT_TERMINAL_PATTERN: &str = r"(?i)^\s*(?:#{1,6}\s*)?(?:\*\*)?(?:implemented|completed|done|erledigt|fertig|completion\s+ledger)(?:\*\*)?\b";
+pub const DEFAULT_TERMINAL_PATTERN: &str = r"(?i)^\s*(?:#{1,6}\s*)?(?:\*\*)?(?:implemented|completed|done|erledigt|fertig|completion(?:\s+|_)ledger)(?:\*\*)?\b";
 
 /// Default request appended when the reviewer examines completed execution.
 pub const DEFAULT_REVIEWER_PROMPT: &str =
@@ -331,6 +331,7 @@ mod tests {
         assert!(pattern.is_match("Implemented the requested change"));
         assert!(pattern.is_match("**Done**\n- Tests pass"));
         assert!(pattern.is_match("**Completion Ledger**\n- Contract satisfied"));
+        assert!(pattern.is_match("COMPLETION_LEDGER\n- Contract satisfied"));
         assert!(pattern.is_match("**Erledigt**\n- Tests bestehen"));
         assert!(pattern.is_match("**Fertig**\n- Tests bestehen"));
         assert!(!pattern.is_match("Implementation is complete, now running tests"));
