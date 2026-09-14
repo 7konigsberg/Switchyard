@@ -11,7 +11,7 @@ use crate::codecs::common::{
     collect_responses_reasoning_text, encrypted_reasoning_data, encrypted_reasoning_item_id,
     is_known_role_name, provider_extensions, reasoning_text_from_blocks, text_from_blocks,
 };
-use crate::codecs::openai_chat::{decode_file_source, decode_image_source};
+use crate::codecs::openai_chat::{decode_file_source, decode_image_source, parse_arguments};
 use crate::codecs::{
     DecodedRequest, DecodedResponse, EncodedRequest, EncodedResponse, FormatCodec,
 };
@@ -526,7 +526,10 @@ fn decode_responses_input(
                         pending_tool_calls.push(ToolCall {
                             id,
                             name,
-                            arguments: item.get("arguments").cloned().unwrap_or_else(|| json!({})),
+                            arguments: item
+                                .get("arguments")
+                                .map(parse_arguments)
+                                .unwrap_or_else(|| json!({})),
                         });
                     }
                     Some("function_call_output") | Some("custom_tool_call_output") => {
@@ -1574,7 +1577,10 @@ fn decode_responses_output_item(
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_string(),
-                arguments: item.get("arguments").cloned().unwrap_or_else(|| json!({})),
+                arguments: item
+                    .get("arguments")
+                    .map(parse_arguments)
+                    .unwrap_or_else(|| json!({})),
             })],
             stop_reason: Some(StopReason::ToolUse),
         })),

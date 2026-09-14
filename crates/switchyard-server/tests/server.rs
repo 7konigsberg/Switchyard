@@ -1643,6 +1643,10 @@ max_checkpoint_turns_total = 8
             && event["item"]["type"] == "function_call"
             && event["item"]["name"] == "apply_patch"
     }));
+    assert!(checkpoint_events.iter().any(|event| {
+        event["type"] == "response.function_call_arguments.delta"
+            && event["delta"] == "{\"patch\":\"*** Begin Patch\\n*** Update File: src/lib.rs\"}"
+    }));
     assert!(
         checkpoint_events
             .iter()
