@@ -486,6 +486,7 @@ impl AdvisorGate {
                 emit_review_audit(ReviewAudit {
                     model: review_model.as_ref().map_or("unavailable", ModelId::as_str),
                     verdict: "APPROVE",
+                    trigger,
                     error: Some(error.to_string()),
                     latency_ms,
                     reply_head: None,
@@ -502,6 +503,7 @@ impl AdvisorGate {
                 emit_review_audit(ReviewAudit {
                     model: review_model.as_ref().map_or("unavailable", ModelId::as_str),
                     verdict: "APPROVE",
+                    trigger,
                     error: None,
                     latency_ms,
                     reply_head: Some(reply_head),
@@ -514,6 +516,7 @@ impl AdvisorGate {
                 emit_review_audit(ReviewAudit {
                     model: review_model.as_ref().map_or("unavailable", ModelId::as_str),
                     verdict: "REDO",
+                    trigger,
                     error: None,
                     latency_ms,
                     reply_head: Some(reply_head),
@@ -529,6 +532,7 @@ impl AdvisorGate {
                 emit_review_audit(ReviewAudit {
                     model: review_model.as_ref().map_or("unavailable", ModelId::as_str),
                     verdict: "UNPARSEABLE",
+                    trigger,
                     error: None,
                     latency_ms,
                     reply_head: Some(reply_head),

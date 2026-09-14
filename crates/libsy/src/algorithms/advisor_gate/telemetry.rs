@@ -70,6 +70,7 @@ pub(super) fn record_discarded(usage: &Usage) {
 pub(super) struct ReviewAudit<'a> {
     pub(super) model: &'a str,
     pub(super) verdict: &'static str,
+    pub(super) trigger: &'static str,
     pub(super) error: Option<String>,
     pub(super) latency_ms: f64,
     pub(super) reply_head: Option<String>,
@@ -87,6 +88,7 @@ pub(super) fn emit_review_audit(audit: ReviewAudit<'_>) {
         ((audit.latency_ms * 10.0).round() / 10.0).into(),
     );
     payload.insert("verdict".to_string(), audit.verdict.into());
+    payload.insert("trigger".to_string(), audit.trigger.into());
     if let Some(error) = audit.error {
         payload.insert("error".to_string(), error.into());
     }
