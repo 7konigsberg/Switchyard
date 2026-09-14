@@ -12,7 +12,7 @@ use switchyard_protocol::{
     ToolCall, ToolChoice, WireFormat,
 };
 
-use super::util::prompts::{SystemPromptProcessor, TargetPrompts, drop_exact_replay};
+use super::util::prompts::{SystemPromptProcessor, TargetPrompts, append_note, drop_exact_replay};
 use super::util::tool_signals::{ToolSignals, is_mutating_tool_call};
 use crate::core::algorithm::{Algorithm, Driver, RoutingIdentity};
 use crate::core::processor::{Event, Processor};
@@ -67,7 +67,6 @@ pub struct PlanExecute {
     capable: ModelId,
     efficient: ModelId,
     planning_prompt: SystemPromptProcessor,
-    planning_prompt_text: String,
     checkpoint_prompt: String,
     checkpoint_interval_turns: u32,
     max_checkpoints: u32,
@@ -117,7 +116,6 @@ impl PlanExecute {
                     .to_string(),
             });
         }
-        let planning_prompt_text = config.planning_prompt.clone();
         let planning_prompt = SystemPromptProcessor::new(
             TargetPrompts::default().with(capable.clone(), config.planning_prompt),
         );
@@ -125,7 +123,6 @@ impl PlanExecute {
             capable,
             efficient,
             planning_prompt,
-            planning_prompt_text,
             checkpoint_prompt: config.checkpoint_prompt,
             checkpoint_interval_turns: config.checkpoint_interval_turns,
             max_checkpoints: config.max_checkpoints,
@@ -230,12 +227,19 @@ impl PlanExecute {
         let downstream_stream = request.llm_request.stream;
         let mut checkpoint_request = compact_execution_context(&request);
         checkpoint_request.llm_request.stream = false;
-        force_exact_responses_stream(&mut checkpoint_request, false);
-        prepend_prompt_preserving_responses(&mut checkpoint_request, &self.planning_prompt_text);
-        append_note_preserving_responses(&mut checkpoint_request, &self.checkpoint_prompt);
+        // Match the initial planning path so their shared prefix stays cacheable.
+        self.planning_prompt
+            .process(
+                &mut (),
+                Event::Decision {
+                    request: &mut checkpoint_request,
+                    selected_model_id: &self.capable,
+                },
+            )
+            .await?;
+        append_note(&mut checkpoint_request, &self.checkpoint_prompt);
         if force_handoff {
             checkpoint_request.llm_request.tool_choice = Some(ToolChoice::None);
-            force_exact_responses_tool_choice_none(&mut checkpoint_request);
         }
 
         let response = driver
@@ -428,75 +432,6 @@ fn append_note_preserving_responses(request: &mut Request, note: &str) {
         .preservation
         .requests
         .retain(|candidate, _| candidate == &format);
-}
-
-fn prepend_prompt_preserving_responses(request: &mut Request, prompt: &str) {
-    request.llm_request.instructions.insert(
-        0,
-        switchyard_protocol::InstructionBlock {
-            role: Role::System,
-            content: vec![ContentBlock::Text {
-                text: prompt.to_string(),
-            }],
-        },
-    );
-    let format = FormatId::known(WireFormat::OpenAiResponses);
-    let Some(body) = request
-        .llm_request
-        .preservation
-        .requests
-        .get_mut(&format)
-        .and_then(serde_json::Value::as_object_mut)
-    else {
-        drop_exact_replay(request);
-        return;
-    };
-    let existing = body
-        .get("instructions")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default();
-    let instructions = if existing == prompt || existing.starts_with(&format!("{prompt}\n\n")) {
-        existing.to_string()
-    } else if existing.is_empty() {
-        prompt.to_string()
-    } else {
-        format!("{prompt}\n\n{existing}")
-    };
-    body.insert(
-        "instructions".to_string(),
-        serde_json::Value::String(instructions),
-    );
-    request
-        .llm_request
-        .preservation
-        .requests
-        .retain(|candidate, _| candidate == &format);
-}
-
-fn force_exact_responses_tool_choice_none(request: &mut Request) {
-    let format = FormatId::known(WireFormat::OpenAiResponses);
-    if let Some(body) = request
-        .llm_request
-        .preservation
-        .requests
-        .get_mut(&format)
-        .and_then(serde_json::Value::as_object_mut)
-    {
-        body.insert("tool_choice".to_string(), serde_json::json!("none"));
-    }
-}
-
-fn force_exact_responses_stream(request: &mut Request, stream: bool) {
-    let format = FormatId::known(WireFormat::OpenAiResponses);
-    if let Some(body) = request
-        .llm_request
-        .preservation
-        .requests
-        .get_mut(&format)
-        .and_then(serde_json::Value::as_object_mut)
-    {
-        body.insert("stream".to_string(), serde_json::json!(stream));
-    }
 }
 
 fn compact_execution_context(base: &Request) -> Request {
@@ -958,13 +893,25 @@ mod tests {
         let (selected, _) = route_and_capture(Arc::clone(&algorithm), progress).await;
         assert_eq!(selected, "model/efficient");
 
-        let checkpoint = request(
+        let mut checkpoint = request(
             vec![
                 Message::text(Role::User, "inspect current state"),
                 tool_call_with_id("initial-edit", "apply_patch", json!({"patch": "initial"})),
                 tool_result("initial-edit", "Done"),
             ],
             Some("checkpoint-task"),
+        );
+        checkpoint.llm_request.preservation.requests.insert(
+            FormatId::known(WireFormat::OpenAiResponses),
+            json!({
+                "instructions": "client instructions",
+                "input": [
+                    {"type": "message", "role": "user", "content": "inspect current state"},
+                    {"type": "function_call", "call_id": "initial-edit", "name": "apply_patch", "arguments": "{\"patch\":\"initial\"}"},
+                    {"type": "function_call_output", "call_id": "initial-edit", "output": "Done"}
+                ],
+                "stream": true
+            }),
         );
         let (selected, response, calls) = drive_and_capture_calls(
             Arc::clone(&algorithm),
@@ -980,6 +927,7 @@ mod tests {
         assert!(matches!(response.llm_response, LlmResponse::Agg(_)));
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "model/capable");
+        assert!(calls[0].1.llm_request.preservation.requests.is_empty());
         assert_eq!(calls[0].1.llm_request.instructions.len(), 1);
         assert_eq!(
             calls[0].1.llm_request.instructions[0].content,
