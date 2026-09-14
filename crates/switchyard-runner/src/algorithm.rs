@@ -250,6 +250,21 @@ pub enum AlgorithmSpec {
         /// Replaces the built-in planning system prompt.
         #[serde(default)]
         planning_prompt: Option<String>,
+        /// Replaces the built-in recurring checkpoint prompt.
+        #[serde(default)]
+        checkpoint_prompt: Option<String>,
+        /// Efficient-model turns between checkpoints. Zero disables checkpoints.
+        #[serde(default)]
+        checkpoint_interval_turns: u32,
+        /// Maximum checkpoints opened during one session.
+        #[serde(default = "default_plan_execute_max_checkpoints")]
+        max_checkpoints: u32,
+        /// Maximum capable-model turns within one checkpoint.
+        #[serde(default = "default_plan_execute_max_checkpoint_turns")]
+        max_checkpoint_turns: u32,
+        /// Maximum capable-model checkpoint turns across one session.
+        #[serde(default = "default_plan_execute_max_checkpoint_turns_total")]
+        max_checkpoint_turns_total: u32,
     },
     /// Asks a judge model which target should serve the request.
     LlmClassifier {
@@ -930,6 +945,11 @@ fn build_algorithm(
             capable_target,
             efficient_target,
             planning_prompt,
+            checkpoint_prompt,
+            checkpoint_interval_turns,
+            max_checkpoints,
+            max_checkpoint_turns,
+            max_checkpoint_turns_total,
         } => {
             let capable = resolve_target_model_id(route_name, capable_target, targets)?;
             let efficient = resolve_target_model_id(route_name, efficient_target, targets)?;
@@ -937,6 +957,13 @@ fn build_algorithm(
             if let Some(prompt) = planning_prompt {
                 config.planning_prompt = prompt.clone();
             }
+            if let Some(prompt) = checkpoint_prompt {
+                config.checkpoint_prompt = prompt.clone();
+            }
+            config.checkpoint_interval_turns = *checkpoint_interval_turns;
+            config.max_checkpoints = *max_checkpoints;
+            config.max_checkpoint_turns = *max_checkpoint_turns;
+            config.max_checkpoint_turns_total = *max_checkpoint_turns_total;
             let algorithm = PlanExecute::new(capable, efficient, config).map_err(|error| {
                 AlgorithmConfigError::with_source(
                     format!("plan_execute route {route_name}: {error}"),
@@ -1217,6 +1244,18 @@ fn build_algorithm(
             }
         }
     }
+}
+
+const fn default_plan_execute_max_checkpoints() -> u32 {
+    8
+}
+
+const fn default_plan_execute_max_checkpoint_turns() -> u32 {
+    4
+}
+
+const fn default_plan_execute_max_checkpoint_turns_total() -> u32 {
+    16
 }
 
 const fn default_max_reviews() -> u32 {

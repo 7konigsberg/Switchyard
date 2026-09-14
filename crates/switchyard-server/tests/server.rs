@@ -419,6 +419,22 @@ async fn upstream_responses_requires_forwarded_auth(
         )
             .into_response();
     }
+    if body["input"].to_string().contains("checkpoint-edit") {
+        return Json(json!({
+            "id": "resp_checkpoint_edit",
+            "object": "response",
+            "model": body["model"],
+            "status": "completed",
+            "output": [{
+                "type": "function_call",
+                "call_id": "checkpoint-edit-call",
+                "name": "apply_patch",
+                "arguments": "{\"patch\":\"*** Begin Patch\\n*** Update File: src/lib.rs\"}"
+            }],
+            "usage": {"input_tokens": 10, "output_tokens": 4, "total_tokens": 14}
+        }))
+        .into_response();
+    }
     Json(json!({
         "id": "resp_test",
         "object": "response",
@@ -1516,6 +1532,149 @@ planning_prompt = "{PLANNING_PROMPT}"
             .to_string()
             .contains("The plan is ready."),
         "the efficient model must inherit the pre-edit trajectory"
+    );
+    Ok(())
+}
+
+/// A recurring checkpoint lets the capable model inspect, make one edit, and hand back.
+#[tokio::test]
+async fn plan_execute_checkpoint_executes_one_capable_edit_then_resumes_execution() -> TestResult {
+    let upstream = MockUpstream::start().await?;
+    let state = load_test_config(&format!(
+        r#"
+schema_version = 1
+
+[llm_clients.upstream]
+format = "openai_responses"
+base_url = "{base_url}"
+forward_auth = true
+max_retries = 0
+
+[targets.capable]
+id = "model/capable"
+llm_client = "upstream"
+
+[targets.efficient]
+id = "model/efficient"
+llm_client = "upstream"
+
+[routes.plan_execute]
+id = "switchyard/plan-execute"
+type = "plan_execute"
+capable_target = "capable"
+efficient_target = "efficient"
+checkpoint_interval_turns = 1
+max_checkpoints = 2
+max_checkpoint_turns = 4
+max_checkpoint_turns_total = 8
+"#,
+        base_url = upstream.base_url
+    ))?;
+    let app = build_switchyard_router(state);
+    let headers = [
+        ("authorization", "Bearer codex-login-token"),
+        ("chatgpt-account-id", "account-123"),
+        ("x-openai-fedramp", "true"),
+        ("x-switchyard-session-id", "checkpoint-session"),
+    ];
+
+    let initial_handoff = send_with_headers(
+        &app,
+        "POST",
+        "/v1/responses",
+        Some(json!({
+            "model": "switchyard/plan-execute",
+            "input": [
+                {"type": "message", "role": "user", "content": "Fix the parser."},
+                {
+                    "type": "function_call",
+                    "call_id": "initial-edit",
+                    "name": "apply_patch",
+                    "arguments": "{\"patch\":\"initial\"}"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "initial-edit",
+                    "output": "Done"
+                }
+            ]
+        })),
+        &headers,
+    )
+    .await?;
+    assert_eq!(initial_handoff.status, StatusCode::OK);
+    assert_eq!(
+        initial_handoff
+            .headers
+            .get("x-model-router-selected-model")
+            .and_then(|value| value.to_str().ok()),
+        Some("model/efficient")
+    );
+
+    let checkpoint_edit = send_with_headers(
+        &app,
+        "POST",
+        "/v1/responses",
+        Some(json!({
+            "model": "switchyard/plan-execute",
+            "input": "checkpoint-edit",
+            "tools": [{
+                "type": "function",
+                "name": "apply_patch",
+                "description": "Apply a patch",
+                "parameters": {"type": "object"}
+            }]
+        })),
+        &headers,
+    )
+    .await?;
+    assert_eq!(checkpoint_edit.status, StatusCode::OK);
+    assert_eq!(
+        checkpoint_edit
+            .headers
+            .get("x-model-router-selected-model")
+            .and_then(|value| value.to_str().ok()),
+        Some("model/capable")
+    );
+    let checkpoint_body = checkpoint_edit.json()?;
+    assert_eq!(checkpoint_body["output"][0]["type"], "function_call");
+    assert_eq!(checkpoint_body["output"][0]["name"], "apply_patch");
+
+    let resumed = send_with_headers(
+        &app,
+        "POST",
+        "/v1/responses",
+        Some(json!({
+            "model": "switchyard/plan-execute",
+            "input": [
+                {"type": "message", "role": "user", "content": "Continue."},
+                {
+                    "type": "function_call",
+                    "call_id": "checkpoint-edit-call",
+                    "name": "apply_patch",
+                    "arguments": "{\"patch\":\"next\"}"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "checkpoint-edit-call",
+                    "output": "Done"
+                }
+            ]
+        })),
+        &headers,
+    )
+    .await?;
+    assert_eq!(resumed.status, StatusCode::OK);
+    assert_eq!(
+        resumed
+            .headers
+            .get("x-model-router-selected-model")
+            .and_then(|value| value.to_str().ok()),
+        Some("model/efficient")
+    );
+    assert_eq!(
+        upstream.models().await,
+        ["model/efficient", "model/capable", "model/efficient"]
     );
     Ok(())
 }

@@ -896,6 +896,11 @@ type = "plan_execute"
 capable_target = "strong"
 efficient_target = "weak"
 planning_prompt = "Inspect and plan before editing."
+checkpoint_prompt = "Inspect current progress before proposing the next edit."
+checkpoint_interval_turns = 10
+max_checkpoints = 8
+max_checkpoint_turns = 4
+max_checkpoint_turns_total = 16
 "#
         );
         let runner = runner_from_toml(&config)?;
@@ -923,6 +928,24 @@ planning_prompt = "   "
         );
 
         assert!(error_message(&config).contains("planning_prompt must not be empty"));
+    }
+
+    #[test]
+    fn plan_execute_route_rejects_invalid_checkpoint_limits() {
+        let config = format!(
+            r#"{VALID_CONFIG}
+
+[routes.plan_execute]
+id = "switchyard/plan-execute"
+type = "plan_execute"
+capable_target = "strong"
+efficient_target = "weak"
+checkpoint_interval_turns = 10
+max_checkpoint_turns = 0
+"#
+        );
+
+        assert!(error_message(&config).contains("checkpoint limits must be at least 1"));
     }
 
     #[test]
