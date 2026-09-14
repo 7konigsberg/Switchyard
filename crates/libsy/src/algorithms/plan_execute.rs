@@ -226,7 +226,7 @@ impl PlanExecute {
     ) -> Result<RoutingOutcome> {
         let downstream_stream = request.llm_request.stream;
         let mut checkpoint_request = compact_execution_context(&request);
-        checkpoint_request.llm_request.stream = false;
+        checkpoint_request.llm_request.stream = true;
         // Match the initial planning path so their shared prefix stays cacheable.
         self.planning_prompt
             .process(
@@ -927,6 +927,7 @@ mod tests {
         assert!(matches!(response.llm_response, LlmResponse::Agg(_)));
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "model/capable");
+        assert!(calls[0].1.llm_request.stream);
         assert!(calls[0].1.llm_request.preservation.requests.is_empty());
         assert_eq!(calls[0].1.llm_request.instructions.len(), 1);
         assert_eq!(

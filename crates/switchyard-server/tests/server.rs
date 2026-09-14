@@ -420,7 +420,7 @@ async fn upstream_responses_requires_forwarded_auth(
             .into_response();
     }
     if body["input"].to_string().contains("checkpoint-edit") {
-        return Json(json!({
+        let response = json!({
             "id": "resp_checkpoint_edit",
             "object": "response",
             "model": body["model"],
@@ -432,8 +432,39 @@ async fn upstream_responses_requires_forwarded_auth(
                 "arguments": "{\"patch\":\"*** Begin Patch\\n*** Update File: src/lib.rs\"}"
             }],
             "usage": {"input_tokens": 10, "output_tokens": 4, "total_tokens": 14}
-        }))
-        .into_response();
+        });
+        if body["stream"].as_bool() == Some(true) {
+            let output = response["output"][0].clone();
+            let events = [
+                json!({
+                    "type": "response.output_item.added",
+                    "output_index": 0,
+                    "item": {
+                        "type": "function_call",
+                        "call_id": "checkpoint-edit-call",
+                        "name": "apply_patch",
+                        "arguments": ""
+                    }
+                }),
+                json!({
+                    "type": "response.function_call_arguments.delta",
+                    "output_index": 0,
+                    "delta": "{\"patch\":\"*** Begin Patch\\n*** Update File: src/lib.rs\"}"
+                }),
+                json!({
+                    "type": "response.output_item.done",
+                    "output_index": 0,
+                    "item": output
+                }),
+                json!({"type": "response.completed", "response": response}),
+            ];
+            let stream =
+                futures_util::stream::iter(events.into_iter().map(|event| {
+                    Ok::<Event, Infallible>(Event::default().data(event.to_string()))
+                }));
+            return Sse::new(stream).into_response();
+        }
+        return Json(response).into_response();
     }
     Json(json!({
         "id": "resp_test",
@@ -1689,6 +1720,7 @@ max_checkpoint_turns_total = 8
         upstream.models().await,
         ["model/efficient", "model/capable", "model/efficient"]
     );
+    assert_eq!(upstream.calls.lock().await[1]["stream"], true);
     Ok(())
 }
 
