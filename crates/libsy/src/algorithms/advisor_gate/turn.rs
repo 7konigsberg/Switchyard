@@ -121,6 +121,22 @@ pub(super) fn has_tool_use(agg: &AggLlmResponse) -> bool {
     })
 }
 
+/// Whether a preserved Responses payload marks an assistant message as final.
+pub(super) fn is_final_answer(agg: &AggLlmResponse) -> bool {
+    let responses = switchyard_protocol::FormatId::known(WireFormat::OpenAiResponses);
+    agg.preservation
+        .responses
+        .get(&responses)
+        .and_then(|response| response.get("output"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|items| {
+            items.iter().any(|item| {
+                item.get("type").and_then(serde_json::Value::as_str) == Some("message")
+                    && item.get("phase").and_then(serde_json::Value::as_str) == Some("final_answer")
+            })
+        })
+}
+
 /// The turn's visible text: all text blocks joined; empty means none.
 pub(super) fn visible_text(agg: &AggLlmResponse) -> Option<String> {
     let text: Vec<&str> = agg
@@ -162,5 +178,64 @@ pub(super) fn reasoning_text(agg: &AggLlmResponse) -> Option<String> {
         None
     } else {
         Some(joined)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use switchyard_protocol::{LlmResponseStreamEvent, Response};
+
+    fn final_answer_response() -> serde_json::Value {
+        serde_json::json!({
+            "id": "resp-final",
+            "output": [{
+                "type": "message",
+                "role": "assistant",
+                "phase": "final_answer",
+                "content": [{"type": "output_text", "text": "finished"}]
+            }]
+        })
+    }
+
+    #[test]
+    fn buffered_responses_final_answer_is_detected() {
+        let mut agg = AggLlmResponse::default();
+        agg.preservation
+            .responses
+            .insert(WireFormat::OpenAiResponses.into(), final_answer_response());
+        assert!(is_final_answer(&agg));
+    }
+
+    #[tokio::test]
+    async fn streamed_responses_final_answer_is_detected() {
+        let event = LlmResponseStreamEvent::preserved(
+            WireFormat::OpenAiResponses,
+            serde_json::json!({
+                "type": "response.completed",
+                "response": final_answer_response()
+            }),
+            vec![
+                LlmResponseChunk::MessageStart {
+                    id: Some("resp-final".to_string()),
+                    model: Some("executor".to_string()),
+                },
+                LlmResponseChunk::TextDelta {
+                    index: 0,
+                    text: "finished".to_string(),
+                },
+                LlmResponseChunk::MessageStop { reason: None },
+            ],
+        );
+        let turn = buffer_turn(
+            "executor",
+            Response {
+                llm_response: LlmResponse::Stream(Box::pin(futures::stream::iter([Ok(event)]))),
+                metadata: None,
+            },
+        )
+        .await
+        .expect("stream buffers");
+        assert!(is_final_answer(&turn.agg));
     }
 }

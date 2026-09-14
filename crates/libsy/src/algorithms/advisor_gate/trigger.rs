@@ -14,6 +14,7 @@ use super::{AdvisorGateConfig, GateTrigger, algorithm_error};
 enum CompiledTrigger {
     NoToolCall,
     Pattern(regex::Regex),
+    FinalAnswerOrPattern(regex::Regex),
 }
 
 /// Classifies buffered turns against the configured trigger and the stall
@@ -54,6 +55,18 @@ impl TriggerClassifier {
                     ))
                 })?)
             }
+            GateTrigger::FinalAnswerOrPattern(pattern) => {
+                if pattern.is_empty() {
+                    return Err(algorithm_error(
+                        "gate_trigger 'final_answer_or_pattern' requires a non-empty fallback pattern",
+                    ));
+                }
+                CompiledTrigger::FinalAnswerOrPattern(regex::Regex::new(pattern).map_err(
+                    |error| {
+                        algorithm_error(format!("fallback pattern is not a valid regex: {error}"))
+                    },
+                )?)
+            }
         };
         Ok(Self {
             trigger,
@@ -69,6 +82,15 @@ impl TriggerClassifier {
             CompiledTrigger::Pattern(pattern) => pattern
                 .is_match(signals.turn.visible_text.as_deref().unwrap_or(""))
                 .then_some("pattern"),
+            CompiledTrigger::FinalAnswerOrPattern(pattern) => {
+                if signals.turn.is_final_answer {
+                    Some("final_answer")
+                } else {
+                    pattern
+                        .is_match(signals.turn.visible_text.as_deref().unwrap_or(""))
+                        .then_some("pattern")
+                }
+            }
             CompiledTrigger::NoToolCall => (!signals.turn.has_tool_use
                 && signals.conversation.tool_result_count >= self.min_tool_results)
                 .then_some("no_tool_call"),
@@ -109,6 +131,7 @@ mod tests {
             turn: TurnSignals {
                 has_tool_use,
                 visible_text: visible_text.map(str::to_string),
+                is_final_answer: false,
             },
         }
     }
@@ -178,6 +201,26 @@ mod tests {
                 .classify(&signals(true, Some("Completed one step"), 0, 0))
                 .fired
                 .is_none()
+        );
+        assert_eq!(
+            classifier
+                .classify(&signals(false, Some("Completed the task"), 0, 0))
+                .fired,
+            Some("pattern")
+        );
+    }
+
+    #[test]
+    fn structured_final_answer_precedes_pattern_fallback() {
+        let classifier = classifier(AdvisorGateConfig {
+            gate_trigger: GateTrigger::FinalAnswerOrPattern("Completed".to_string()),
+            ..AdvisorGateConfig::default()
+        });
+        let mut final_answer = signals(false, Some("arbitrary text"), 0, 0);
+        final_answer.turn.is_final_answer = true;
+        assert_eq!(
+            classifier.classify(&final_answer).fired,
+            Some("final_answer")
         );
         assert_eq!(
             classifier

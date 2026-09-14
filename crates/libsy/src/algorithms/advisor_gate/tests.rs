@@ -1561,4 +1561,11 @@ fn new_validation_errors() {
         },
         "not a valid regex",
     );
+    invalid(
+        AdvisorGateConfig {
+            gate_trigger: GateTrigger::FinalAnswerOrPattern(String::new()),
+            ..AdvisorGateConfig::default()
+        },
+        "non-empty fallback pattern",
+    );
 }

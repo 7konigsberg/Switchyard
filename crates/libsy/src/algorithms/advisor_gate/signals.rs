@@ -11,7 +11,7 @@ use crate::Result;
 use crate::algorithms::util::tool_signals::ToolSignals;
 use crate::core::processor::{Event, Processor};
 
-use super::turn::{has_tool_use, visible_text};
+use super::turn::{has_tool_use, is_final_answer, visible_text};
 
 /// Facts the trigger classifier reads, keyed by the event that produced them.
 #[derive(Default)]
@@ -29,6 +29,8 @@ pub(super) struct TurnSignals {
     pub(super) has_tool_use: bool,
     /// The turn's visible text; `None` when it has no text blocks.
     pub(super) visible_text: Option<String>,
+    /// The Responses payload marks an assistant message as a final answer.
+    pub(super) is_final_answer: bool,
 }
 
 /// Fills [`GateSignals`], each event writing its own side.
@@ -45,6 +47,7 @@ impl Processor<GateSignals> for GateSignalProcessor {
                 state.turn = TurnSignals {
                     has_tool_use: has_tool_use(agg),
                     visible_text: visible_text(agg),
+                    is_final_answer: is_final_answer(agg),
                 };
             }
             Event::Decision { .. } => {}
@@ -59,7 +62,7 @@ mod tests {
     use crate::core::testing::empty_driver;
     use switchyard_protocol::{
         AggLlmResponse, ContentBlock, LlmRequest, Message, ModelId, Request, ResponseOutput, Role,
-        ToolCall, ToolResult,
+        ToolCall, ToolResult, WireFormat,
     };
 
     fn conversation_request() -> Request {
@@ -134,10 +137,27 @@ mod tests {
             .await?;
         assert!(state.turn.has_tool_use);
         assert_eq!(state.turn.visible_text.as_deref(), Some("running a tool"));
+        assert!(!state.turn.is_final_answer);
         assert_eq!(
             state.conversation.tool_result_count, 1,
             "the response never rewrites conversation counts"
         );
+
+        let mut final_answer = tool_call_agg();
+        final_answer.preservation.responses.insert(
+            WireFormat::OpenAiResponses.into(),
+            serde_json::json!({
+                "output": [{
+                    "type": "message",
+                    "phase": "final_answer",
+                    "content": [{"type": "output_text", "text": "done"}]
+                }]
+            }),
+        );
+        processor
+            .process(&mut state, Event::ModelResponse(&final_answer))
+            .await?;
+        assert!(state.turn.is_final_answer);
         Ok(())
     }
 

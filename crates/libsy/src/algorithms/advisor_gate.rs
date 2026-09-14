@@ -99,6 +99,9 @@ pub enum GateTrigger {
     /// for text-protocol harnesses where every turn lacks tool calls and
     /// completion is declared with a textual marker instead.
     Pattern(String),
+    /// A structured Codex final answer, with a text pattern as a fallback for
+    /// clients that do not expose response phases.
+    FinalAnswerOrPattern(String),
 }
 
 /// Shape of the request sent to the reviewer.

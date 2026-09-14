@@ -105,7 +105,7 @@ impl PlanExecuteReview {
             reviewer_prefix_prompt: Some(planning_prompt_text.clone()),
             redo_feedback_prefix: config.redo_feedback_prefix,
             review_context: ReviewContext::ExecutionDelta,
-            gate_trigger: GateTrigger::Pattern(config.terminal_pattern),
+            gate_trigger: GateTrigger::FinalAnswerOrPattern(config.terminal_pattern),
             gate_require_no_tool_call: true,
             max_reviews: config.max_reviews,
             gate_stall_turns: 0,
@@ -322,6 +322,25 @@ mod tests {
         }
     }
 
+    fn structured_final_reply(text: &str) -> Response {
+        let mut response = reply(text);
+        let LlmResponse::Agg(agg) = &mut response.llm_response else {
+            panic!("reply is buffered");
+        };
+        agg.preservation.responses.insert(
+            WireFormat::OpenAiResponses.into(),
+            serde_json::json!({
+                "output": [{
+                    "type": "message",
+                    "role": "assistant",
+                    "phase": "final_answer",
+                    "content": [{"type": "output_text", "text": text}]
+                }]
+            }),
+        );
+        response
+    }
+
     #[test]
     fn default_terminal_pattern_matches_observed_completion_headers() {
         let pattern =
@@ -434,7 +453,7 @@ mod tests {
                     if is_review {
                         Ok(reply("APPROVE"))
                     } else {
-                        Ok(reply("Completed the task"))
+                        Ok(structured_final_reply("Work summary"))
                     }
                 }
             },
@@ -466,7 +485,7 @@ mod tests {
             review.messages[review.messages.len() - 2]
                 .text_content("\n")
                 .expect("completion text")
-                .starts_with("Completed")
+                .starts_with("Work summary")
         );
     }
 
