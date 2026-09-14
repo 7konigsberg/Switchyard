@@ -227,7 +227,10 @@ impl PlanExecute {
         mut request: Request,
         force_handoff: bool,
     ) -> Result<RoutingOutcome> {
+        let downstream_stream = request.llm_request.stream;
         let mut checkpoint_request = compact_execution_context(&request);
+        checkpoint_request.llm_request.stream = false;
+        force_exact_responses_stream(&mut checkpoint_request, false);
         prepend_prompt_preserving_responses(&mut checkpoint_request, &self.planning_prompt_text);
         append_note_preserving_responses(&mut checkpoint_request, &self.checkpoint_prompt);
         if force_handoff {
@@ -244,7 +247,7 @@ impl PlanExecute {
             .into_agg()
             .await
             .map_err(|source| LibsyError::client_call(self.capable.clone(), source))?;
-        let mutations = mutating_calls(&aggregate);
+        let has_mutations = !mutating_calls(&aggregate).is_empty();
         let has_tools = aggregate.outputs.iter().any(|output| {
             output
                 .content
@@ -252,17 +255,22 @@ impl PlanExecute {
                 .any(|block| matches!(block, ContentBlock::ToolCall(_)))
         });
 
-        if !mutations.is_empty() || has_tools && !force_handoff {
+        if has_mutations || has_tools && !force_handoff {
+            let llm_response = if downstream_stream {
+                LlmResponse::Stream(aggregate.into_stream())
+            } else {
+                LlmResponse::Agg(aggregate)
+            };
             tracing::info!(
                 target = %self.capable,
-                phase = if mutations.is_empty() { "checkpoint_probe" } else { "checkpoint_edit" },
+                phase = if has_mutations { "checkpoint_edit" } else { "checkpoint_probe" },
                 "plan-execute selected target"
             );
             return Ok(RoutingOutcome::answered(
                 self.capable.clone(),
                 checkpoint_request,
                 Response {
-                    llm_response: LlmResponse::Agg(aggregate),
+                    llm_response,
                     metadata,
                 },
             ));
@@ -475,6 +483,19 @@ fn force_exact_responses_tool_choice_none(request: &mut Request) {
         .and_then(serde_json::Value::as_object_mut)
     {
         body.insert("tool_choice".to_string(), serde_json::json!("none"));
+    }
+}
+
+fn force_exact_responses_stream(request: &mut Request, stream: bool) {
+    let format = FormatId::known(WireFormat::OpenAiResponses);
+    if let Some(body) = request
+        .llm_request
+        .preservation
+        .requests
+        .get_mut(&format)
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        body.insert("stream".to_string(), serde_json::json!(stream));
     }
 }
 

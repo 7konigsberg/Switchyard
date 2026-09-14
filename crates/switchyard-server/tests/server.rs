@@ -1618,6 +1618,7 @@ max_checkpoint_turns_total = 8
         Some(json!({
             "model": "switchyard/plan-execute",
             "input": "checkpoint-edit",
+            "stream": true,
             "tools": [{
                 "type": "function",
                 "name": "apply_patch",
@@ -1636,9 +1637,17 @@ max_checkpoint_turns_total = 8
             .and_then(|value| value.to_str().ok()),
         Some("model/capable")
     );
-    let checkpoint_body = checkpoint_edit.json()?;
-    assert_eq!(checkpoint_body["output"][0]["type"], "function_call");
-    assert_eq!(checkpoint_body["output"][0]["name"], "apply_patch");
+    let checkpoint_events = sse_events(checkpoint_edit.text()?);
+    assert!(checkpoint_events.iter().any(|event| {
+        event["type"] == "response.output_item.added"
+            && event["item"]["type"] == "function_call"
+            && event["item"]["name"] == "apply_patch"
+    }));
+    assert!(
+        checkpoint_events
+            .iter()
+            .any(|event| event["type"] == "response.completed")
+    );
 
     let resumed = send_with_headers(
         &app,
