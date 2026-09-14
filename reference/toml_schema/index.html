@@ -1677,7 +1677,7 @@ route reaches no upstream. A file without a <code>[targets]</code> table is reje
 <td><code>forward_auth</code></td>
 <td style="text-align: center;">No</td>
 <td><code>false</code></td>
-<td>Forward the caller's provider credential to this upstream.</td>
+<td>Forward the caller's provider credential and application headers. All backends reachable through the route must use the same provider.</td>
 </tr>
 <tr>
 <td><code>extra_headers</code></td>
@@ -1709,11 +1709,13 @@ forward <code>oauth-*</code> values from <code>anthropic-beta</code> and remove 
 values.</p>
 <p>This setting gives <code>base_url</code> the caller's login. Enable it only when that
 upstream should receive the credential, and use HTTPS unless the upstream runs
-on loopback. Forwarding clients do not follow HTTP redirects. Check every
-forwarding client used by a route, including classifier and judge targets. The
-server rejects an Anthropic forwarding route called through an OpenAI endpoint,
-or an OpenAI forwarding route called through an Anthropic endpoint, before it
-calls an upstream.</p>
+on loopback. All backends reachable through the route must use the same
+provider because other application headers are preserved and may contain
+provider-specific credentials. Forwarding clients do not follow HTTP redirects.
+Check every forwarding client used by a route, including classifier and judge
+targets. The server rejects an Anthropic forwarding route called through an
+OpenAI endpoint, or an OpenAI forwarding route called through an Anthropic
+endpoint, before it calls an upstream.</p>
 <h2 id="targetsname"><code>[targets.&lt;name&gt;]</code><a class="headerlink" href="#targetsname" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
