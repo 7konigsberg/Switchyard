@@ -139,8 +139,6 @@ static BASH_EDIT_PATTERNS: &[&str] = &[
     "sed --in-place",
     "awk -i inplace",
     "awk 'inplace=1'",
-    "patch ",
-    "patch -p",
     "perl -i",
     "perl -p -i",
     "perl -pi",
@@ -466,7 +464,7 @@ fn classify_tool_call_with_semantics(
         if cmd.contains("python") && PYTHON_WRITE_PATTERNS.iter().any(|p| cmd.contains(p)) {
             return ToolSemantic::Mutate(MutationKind::Write);
         }
-        if BASH_EDIT_PATTERNS.iter().any(|p| cmd.contains(p)) {
+        if BASH_EDIT_PATTERNS.iter().any(|p| cmd.contains(p)) || runs_patch_mutation(cmd) {
             return ToolSemantic::Mutate(MutationKind::Edit);
         }
         if BASH_READ_PATTERNS.iter().any(|p| cmd.contains(p)) {
@@ -474,6 +472,37 @@ fn classify_tool_call_with_semantics(
         }
     }
     semantics.classify(name).unwrap_or(ToolSemantic::Unknown)
+}
+
+fn runs_patch_mutation(command: &str) -> bool {
+    let normalized = command
+        .replace("&&", "\n")
+        .replace("||", "\n")
+        .replace([';', '|'], "\n");
+    normalized.lines().any(|segment| {
+        let words = segment.split_whitespace().collect::<Vec<_>>();
+        let Some(command_index) = words
+            .iter()
+            .position(|word| !word.contains('=') && *word != "env")
+        else {
+            return false;
+        };
+        let executable = words[command_index]
+            .rsplit('/')
+            .next()
+            .unwrap_or(words[command_index]);
+        let args = &words[command_index + 1..];
+        match executable {
+            "apply_patch" => true,
+            "patch" => !args
+                .iter()
+                .any(|arg| matches!(*arg, "--dry-run" | "--version" | "--help" | "-h" | "-v")),
+            "git" if args.first() == Some(&"apply") => !args
+                .iter()
+                .any(|arg| matches!(*arg, "--check" | "--stat" | "--numstat" | "--summary")),
+            _ => false,
+        }
+    })
 }
 
 fn is_builtin_tool_name(lower: &str) -> bool {
@@ -1364,6 +1393,39 @@ mod tests {
             classify_tool_call("Bash", Some("cat /etc/hosts > /tmp/out")),
             ToolSemantic::Mutate(MutationKind::Write),
         );
+    }
+
+    #[test]
+    fn patch_discovery_and_dry_runs_are_read_only() {
+        let cases = [
+            "command -v apply_patch || type apply_patch || find / -name apply_patch -type f",
+            "find /tmp /opt -type f -name apply_patch",
+            "command -v patch || true; patch --version",
+            "patch -p1 --dry-run < /tmp/client.patch",
+            "git apply --check /tmp/change.patch",
+        ];
+        for command in cases {
+            assert!(!matches!(
+                classify_tool_call("exec_command", Some(command)),
+                ToolSemantic::Mutate(_)
+            ));
+        }
+    }
+
+    #[test]
+    fn patch_execution_is_mutating() {
+        let cases = [
+            "apply_patch < /tmp/change.patch",
+            "PATH=/tmp/bin:$PATH apply_patch < /tmp/change.patch",
+            "patch -p1 < /tmp/change.patch",
+            "git apply /tmp/change.patch",
+        ];
+        for command in cases {
+            assert_eq!(
+                classify_tool_call("exec_command", Some(command)),
+                ToolSemantic::Mutate(MutationKind::Edit)
+            );
+        }
     }
 
     #[test]

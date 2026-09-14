@@ -30,6 +30,8 @@ pub const DEFAULT_CHECKPOINT_PROMPT: &str =
 const MAX_EXECUTING_SESSIONS: usize = 4_096;
 /// Tool call pairs retained after the initial handoff for checkpoint context.
 const RECENT_CHECKPOINT_TOOL_CALLS: usize = 6;
+/// Maximum visible checkpoint guidance retained in route state.
+const MAX_CHECKPOINT_GUIDANCE_CHARS: usize = 4_096;
 
 /// Configuration for [`PlanExecute`].
 #[derive(Clone, Debug)]
@@ -82,11 +84,12 @@ struct ExecutionState {
     checkpoint_turns: Option<u32>,
     checkpoint_turns_total: u32,
     checkpoint_known_mutations: HashSet<String>,
+    checkpoint_guidance: Option<String>,
 }
 
 enum Phase {
     Plan,
-    Execute,
+    Execute { guidance: Option<String> },
     Checkpoint { force_handoff: bool },
 }
 
@@ -139,7 +142,7 @@ impl PlanExecute {
         let mutation_ids = mutation_call_ids(request);
         let Some(identity) = RoutingIdentity::from_request(request) else {
             return if mutation_seen {
-                Phase::Execute
+                Phase::Execute { guidance: None }
             } else {
                 Phase::Plan
             };
@@ -152,9 +155,12 @@ impl PlanExecute {
             == Some(true);
         let mut sessions = self.sessions.lock();
         if session_final {
-            let was_executing = sessions.remove(&identity).is_some();
+            let state = sessions.remove(&identity);
+            let was_executing = state.is_some();
             return if mutation_seen || was_executing {
-                Phase::Execute
+                Phase::Execute {
+                    guidance: state.and_then(|state| state.checkpoint_guidance),
+                }
             } else {
                 Phase::Plan
             };
@@ -180,7 +186,9 @@ impl PlanExecute {
                 state.checkpoint_turns = None;
                 state.checkpoint_known_mutations.clear();
                 state.efficient_turns = 1;
-                return Phase::Execute;
+                return Phase::Execute {
+                    guidance: state.checkpoint_guidance.clone(),
+                };
             }
             *turns = turns.saturating_add(1);
             state.checkpoint_turns_total = state.checkpoint_turns_total.saturating_add(1);
@@ -204,7 +212,30 @@ impl PlanExecute {
             };
         }
         state.efficient_turns = state.efficient_turns.saturating_add(1);
-        Phase::Execute
+        Phase::Execute {
+            guidance: state.checkpoint_guidance.clone(),
+        }
+    }
+
+    fn checkpoint_guidance(&self, request: &Request) -> Option<String> {
+        let identity = RoutingIdentity::from_request(request)?;
+        self.sessions
+            .lock()
+            .get(&identity)
+            .and_then(|state| state.checkpoint_guidance.clone())
+    }
+
+    fn remember_checkpoint_guidance(&self, request: &Request, response: &AggLlmResponse) {
+        let Some(identity) = RoutingIdentity::from_request(request) else {
+            return;
+        };
+        let visible = visible_response_text(response);
+        if visible.is_empty() {
+            return;
+        }
+        if let Some(state) = self.sessions.lock().get_mut(&identity) {
+            state.checkpoint_guidance = Some(limit_chars(&visible, MAX_CHECKPOINT_GUIDANCE_CHARS));
+        }
     }
 
     fn finish_checkpoint(&self, request: &Request) {
@@ -237,6 +268,12 @@ impl PlanExecute {
                 },
             )
             .await?;
+        if let Some(guidance) = self.checkpoint_guidance(&request) {
+            append_note(
+                &mut checkpoint_request,
+                &format!("Current durable plan update:\n{guidance}"),
+            );
+        }
         append_note(&mut checkpoint_request, &self.checkpoint_prompt);
         if force_handoff {
             checkpoint_request.llm_request.tool_choice = Some(ToolChoice::None);
@@ -260,6 +297,9 @@ impl PlanExecute {
         });
 
         if has_mutations || has_tools && !force_handoff {
+            if has_mutations {
+                self.remember_checkpoint_guidance(&request, &aggregate);
+            }
             let llm_response = if downstream_stream {
                 LlmResponse::Stream(aggregate.into_stream())
             } else {
@@ -280,6 +320,7 @@ impl PlanExecute {
             ));
         }
 
+        self.remember_checkpoint_guidance(&request, &aggregate);
         let handoff = checkpoint_handoff(&aggregate, force_handoff && has_tools);
         self.finish_checkpoint(&request);
         append_note_preserving_responses(&mut request, &handoff);
@@ -308,7 +349,13 @@ impl Algorithm for PlanExecute {
         mut request: Request,
     ) -> Result<RoutingOutcome> {
         match self.phase(&request) {
-            Phase::Execute => {
+            Phase::Execute { guidance } => {
+                if let Some(guidance) = guidance {
+                    append_note_preserving_responses(
+                        &mut request,
+                        &format!("Current durable plan update:\n{guidance}"),
+                    );
+                }
                 tracing::info!(target = %self.efficient, phase = "execute", "plan-execute selected target");
                 Ok(RoutingOutcome::route_to(
                     self.efficient.clone(),
@@ -370,16 +417,7 @@ fn mutation_call_ids(request: &Request) -> HashSet<String> {
 }
 
 fn checkpoint_handoff(response: &AggLlmResponse, blocked_by_budget: bool) -> String {
-    let visible = response
-        .outputs
-        .iter()
-        .flat_map(|output| output.content.iter())
-        .filter_map(|block| match block {
-            ContentBlock::Text { text } => Some(text.as_str()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    let visible = visible_response_text(response);
     if blocked_by_budget {
         return format!(
             "The bounded planning checkpoint ended before its requested tools ran. Continue implementation using the evidence already available.\n\nLatest planning note:\n{}",
@@ -398,6 +436,25 @@ fn checkpoint_handoff(response: &AggLlmResponse, blocked_by_budget: bool) -> Str
             &visible
         }
     )
+}
+
+fn visible_response_text(response: &AggLlmResponse) -> String {
+    response
+        .outputs
+        .iter()
+        .flat_map(|output| output.content.iter())
+        .filter_map(|block| match block {
+            ContentBlock::Text { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
+}
+
+fn limit_chars(value: &str, limit: usize) -> String {
+    value.chars().take(limit).collect()
 }
 
 fn append_note_preserving_responses(request: &mut Request, note: &str) {
@@ -986,12 +1043,100 @@ mod tests {
             ],
             Some("checkpoint-task"),
         );
-        let (selected, routed) = route_and_capture(algorithm, edit_executed.clone()).await;
+        let (selected, routed) =
+            route_and_capture(Arc::clone(&algorithm), edit_executed.clone()).await;
         assert_eq!(selected, "model/efficient");
         assert_eq!(
-            routed.llm_request.messages,
+            &routed.llm_request.messages[..edit_executed.llm_request.messages.len()],
             edit_executed.llm_request.messages
         );
+        assert_eq!(
+            routed.llm_request.messages.last(),
+            Some(&Message::text(
+                Role::User,
+                "Current durable plan update:\nThe implementation needs one correction."
+            ))
+        );
+
+        let later_execution = request(
+            vec![Message::text(Role::User, "continue implementation")],
+            Some("checkpoint-task"),
+        );
+        let (selected, routed) = route_and_capture(algorithm, later_execution).await;
+        assert_eq!(selected, "model/efficient");
+        assert!(routed
+            .llm_request
+            .messages
+            .last()
+            .expect("execution request should retain the user message")
+            .content
+            .iter()
+            .any(|block| matches!(
+                block,
+                ContentBlock::Text { text }
+                    if text == "Current durable plan update:\nThe implementation needs one correction."
+            )));
+    }
+
+    #[tokio::test]
+    async fn checkpoint_guidance_is_visible_to_the_next_checkpoint() {
+        let algorithm = checkpoint_algorithm(1, 8, 4, 16);
+        let seed = request(
+            vec![tool_call_with_id(
+                "initial-edit",
+                "apply_patch",
+                json!({"patch": "initial"}),
+            )],
+            Some("durable-guidance-task"),
+        );
+        route_and_capture(Arc::clone(&algorithm), seed).await;
+
+        let first_checkpoint = request(
+            vec![Message::text(Role::User, "implementation progress")],
+            Some("durable-guidance-task"),
+        );
+        drive_and_capture_calls(
+            Arc::clone(&algorithm),
+            first_checkpoint,
+            Response {
+                llm_response: LlmResponse::Agg(switchyard_protocol::text_response(
+                    None,
+                    "Keep the parser change and add the missing boundary test.",
+                )),
+                metadata: None,
+            },
+        )
+        .await;
+
+        let next_checkpoint = request(
+            vec![Message::text(Role::User, "more implementation progress")],
+            Some("durable-guidance-task"),
+        );
+        let (selected, _, calls) = drive_and_capture_calls(
+            algorithm,
+            next_checkpoint,
+            Response {
+                llm_response: LlmResponse::Agg(switchyard_protocol::text_response(
+                    None,
+                    "Continue.",
+                )),
+                metadata: None,
+            },
+        )
+        .await;
+        assert_eq!(selected, "model/efficient");
+        assert_eq!(calls[0].0, "model/capable");
+        assert!(calls[0]
+            .1
+            .llm_request
+            .messages
+            .iter()
+            .flat_map(|message| message.content.iter())
+            .any(|block| matches!(
+                block,
+                ContentBlock::Text { text }
+                    if text.contains("Keep the parser change and add the missing boundary test.")
+            )));
     }
 
     #[tokio::test]
