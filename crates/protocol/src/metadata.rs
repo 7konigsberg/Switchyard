@@ -263,19 +263,14 @@ fn parse_sub_agent(headers: &http::HeaderMap) -> (Option<String>, bool, bool) {
 
     let is_subagent = explicit.unwrap_or(claude_subagent || codex_child || harness_kind.is_some());
 
-    let is_delegated_work = match explicit {
-        Some(false) => false,
-        Some(true) => harness_kind
-            .as_deref()
-            .map(|k| SUBAGENT_WORK_KINDS.contains(&k))
-            .unwrap_or(true),
-        None => {
-            claude_subagent
-                || codex_child
-                || harness_kind
-                    .as_deref()
-                    .is_some_and(|k| SUBAGENT_WORK_KINDS.contains(&k))
-        }
+    // An explicit false disables subagent routing. Otherwise, a supplied task kind must
+    // be in SUBAGENT_WORK_KINDS; child-thread headers cannot override it. Without a kind,
+    // an explicit true or recognized child-thread headers indicate subagent work.
+    let is_delegated_work = match (explicit, harness_kind.as_deref()) {
+        (Some(false), _) => false,
+        (_, Some(kind)) => SUBAGENT_WORK_KINDS.contains(&kind),
+        (Some(true), None) => true,
+        (None, None) => claude_subagent || codex_child,
     };
 
     (parent, is_subagent, is_delegated_work)
