@@ -13,13 +13,13 @@ use futures_util::{StreamExt, stream};
 use http::StatusCode;
 use reqwest::RequestBuilder;
 use reqwest::header::{HeaderMap, RETRY_AFTER};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 use switchyard_protocol::{
     LlmRequest, LlmResponse, LlmResponseChunk, LlmResponseStreamEvent, Metadata, ModelId, Request,
     Response, RoutedLlmClient,
 };
 use switchyard_translation::{
-    WireFormat, decode_aggregated_response, decode_request, decode_stream,
+    TranslationError, WireFormat, decode_aggregated_response, decode_request, decode_stream,
     encode_aggregated_response_with_extensions, encode_request, encode_stream_with_extensions,
 };
 use tracing::Instrument;
@@ -503,8 +503,24 @@ impl TranslatingLlmClient {
                 let body = serde_json::from_slice::<Value>(&body).map_err(|error| {
                     LlmClientError::ResponseTranslation(format!("invalid upstream JSON: {error}"))
                 })?;
-                let agg = decode_aggregated_response(&body, wire_format)
-                    .map_err(|error| LlmClientError::ResponseTranslation(error.to_string()))?;
+                // Map a provider's failed generation to 502, even under HTTP 200.
+                // Redact forwarded credentials before returning the provider error.
+                let agg =
+                    decode_aggregated_response(&body, wire_format).map_err(
+                        |error| match error {
+                            TranslationError::UpstreamFailure { error } => {
+                                LlmClientError::UpstreamHttp {
+                                    status: StatusCode::BAD_GATEWAY,
+                                    body: redact_forwarded_headers(
+                                        json!({ "error": error }).to_string(),
+                                        metadata.as_ref(),
+                                        backend.is_forwarding_auth(),
+                                    ),
+                                }
+                            }
+                            error => LlmClientError::ResponseTranslation(error.to_string()),
+                        },
+                    )?;
                 (LlmResponse::Agg(agg), upstream_headers)
             }
         };

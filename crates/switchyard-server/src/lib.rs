@@ -1251,12 +1251,7 @@ fn client_error(error: &LlmClientError) -> Response {
             "invalid_request_error",
             "context_length_exceeded",
         ),
-        LlmClientError::UpstreamHttp { status, body } => error_response(
-            *status,
-            upstream_error_message(body),
-            "upstream_error",
-            "upstream_error",
-        ),
+        LlmClientError::UpstreamHttp { status, body } => upstream_error(*status, body),
         LlmClientError::Transport { source } | LlmClientError::InvalidResponse { source } => {
             error_response(
                 StatusCode::BAD_GATEWAY,
@@ -1282,26 +1277,25 @@ fn client_error(error: &LlmClientError) -> Response {
     }
 }
 
-// Provider errors are often JSON documents; expose their message without
-// embedding the entire document as an escaped string in our error envelope.
-fn upstream_error_message(body: &str) -> String {
-    serde_json::from_str::<Value>(body)
-        .ok()
-        .and_then(|body| {
-            body.pointer("/error/message")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
-        .unwrap_or_else(|| body.to_string())
+// Keep the provider's message and nonempty string code in our error JSON.
+fn upstream_error(status: StatusCode, body: &str) -> Response {
+    let parsed = serde_json::from_str::<Value>(body).unwrap_or_default();
+    let error = &parsed["error"];
+    let message = error["message"].as_str().unwrap_or(body);
+    let code = error["code"]
+        .as_str()
+        .filter(|code| !code.is_empty())
+        .unwrap_or("upstream_error");
+    error_response(status, message, "upstream_error", code)
 }
 
-// Error metadata retained until the client-facing endpoint selects an envelope.
+// Keep error details until the endpoint chooses its response format.
 #[derive(Clone)]
 struct ApiError {
     status: StatusCode,
     message: String,
     error_type: &'static str,
-    code: &'static str,
+    code: String,
 }
 
 impl ApiError {
@@ -1309,13 +1303,13 @@ impl ApiError {
         status: StatusCode,
         message: impl Into<String>,
         error_type: &'static str,
-        code: &'static str,
+        code: impl Into<String>,
     ) -> Self {
         Self {
             status,
             message: message.into(),
             error_type,
-            code,
+            code: code.into(),
         }
     }
 
@@ -1386,7 +1380,7 @@ fn error_response(
     status: StatusCode,
     message: impl Into<String>,
     error_type: &'static str,
-    code: &'static str,
+    code: impl Into<String>,
 ) -> Response {
     ApiError::new(status, message, error_type, code).into_response(WireFormat::OpenAiChat)
 }

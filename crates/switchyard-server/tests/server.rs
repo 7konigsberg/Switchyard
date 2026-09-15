@@ -51,6 +51,7 @@ impl MockUpstream {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let app = Router::new()
             .route("/v1/chat/completions", post(upstream_chat))
+            .route("/buffered/responses", post(upstream_buffered_responses))
             .route(
                 "/v1/messages",
                 post(upstream_messages_requires_forwarded_oauth),
@@ -521,6 +522,43 @@ async fn upstream_responses_requires_forwarded_auth(
     .into_response()
 }
 
+async fn upstream_buffered_responses(
+    State(calls): State<Arc<Mutex<Vec<Value>>>>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Json<Value> {
+    calls.lock().await.push(body.clone());
+    let model = body["model"].as_str().unwrap_or_default();
+    let mut response = json!({
+        "id": "resp_buffered", "object": "response", "model": model,
+        "status": "failed", "output": [], "usage": null,
+        "error": {"code": "server_error", "message": "deterministic upstream failure"}
+    });
+    match model {
+        "model/missing-error" => response = json!({"status": "failed"}),
+        "model/invalid-error" => response["error"] = json!("invalid error details"),
+        "model/invalid-code" => response["error"]["code"] = json!(42),
+        "model/empty-code" => response["error"]["code"] = json!(""),
+        "model/fallback" => {
+            response["status"] = json!("completed");
+            response["error"] = Value::Null;
+            response["output"] = json!([{
+                "type": "message", "role": "assistant",
+                "content": [{"type": "output_text", "text": "ok"}]
+            }]);
+        }
+        _ => {}
+    }
+    if let Some(secret) = headers.get("x-private-token") {
+        response["error"]["code"] = json!(secret.to_str().unwrap_or_default());
+        response["error"]["message"] = json!(format!(
+            "provider rejected {}",
+            secret.to_str().unwrap_or_default()
+        ));
+    }
+    Json(response)
+}
+
 async fn upstream_redirect_capture(
     State(calls): State<Arc<Mutex<Vec<Value>>>>,
     headers: HeaderMap,
@@ -800,6 +838,120 @@ async fn stats_accumulates_buffered_success_error_and_shared_routes() -> TestRes
     assert_eq!(stats["models"]["gemini-3.5-flash"]["errors"], 1);
     assert_eq!(stats["models"]["model/unknown"]["calls"], 1);
     assert_eq!(stats["routing_overhead"]["count"], 3);
+    Ok(())
+}
+
+fn buffered_responses_app(
+    upstream: &MockUpstream,
+    model: &str,
+    fallback: bool,
+    forward_auth: bool,
+) -> TestResult<Router> {
+    let route = if fallback {
+        "type = \"random\"\ntargets = [\"first\", \"second\"]\nweights = [1000, 1]\nseed = 17"
+    } else {
+        "type = \"passthrough\"\ntarget = \"first\""
+    };
+    let state = load_test_config(&format!(
+        r#"
+schema_version = 1
+[llm_clients.mock]
+format = "openai_responses"
+base_url = "{base_url}/buffered"
+forward_auth = {forward_auth}
+max_retries = 0
+[targets]
+first = {{ id = "{model}", llm_client = "mock" }}
+second = {{ id = "model/fallback", llm_client = "mock" }}
+[routes.response]
+id = "{ROUTE_MODEL}"
+{route}
+"#,
+        base_url = upstream.base_url.trim_end_matches("/v1"),
+    ))?;
+    Ok(build_switchyard_router(state))
+}
+
+#[tokio::test]
+async fn failed_responses_return_errors_and_try_fallback_across_endpoints() -> TestResult {
+    let upstream = MockUpstream::start().await?;
+    let requests = [
+        (
+            "/v1/chat/completions",
+            json!({
+                "model": ROUTE_MODEL, "messages": [{"role": "user", "content": "hello"}]
+            }),
+        ),
+        (
+            "/v1/messages",
+            json!({
+                "model": ROUTE_MODEL, "max_tokens": 16,
+                "messages": [{"role": "user", "content": "hello"}]
+            }),
+        ),
+        (
+            "/v1/responses",
+            json!({"model": ROUTE_MODEL, "input": "hello"}),
+        ),
+    ];
+    let failure = "deterministic upstream failure";
+    let missing = "provider reported status \"failed\" without error details";
+    for (model, message, code) in [
+        ("model/failed", failure, "server_error"),
+        ("model/missing-error", missing, "upstream_error"),
+        ("model/invalid-error", missing, "upstream_error"),
+        ("model/invalid-code", failure, "upstream_error"),
+        ("model/empty-code", failure, "upstream_error"),
+    ] {
+        let app = buffered_responses_app(&upstream, model, false, false)?;
+        for (path, body) in &requests {
+            let response = send(&app, "POST", path, Some(body.clone())).await?;
+            assert_eq!(response.status, StatusCode::BAD_GATEWAY, "{model}: {path}");
+            let expected = if *path == "/v1/messages" {
+                json!({"type": "error", "error": {"type": "api_error", "message": message}})
+            } else {
+                json!({"error": {"type": "upstream_error", "code": code, "message": message}})
+            };
+            assert_eq!(response.json()?, expected, "{model}: {path}");
+        }
+        let stats = send(&app, "GET", "/v1/stats", None).await?.json()?;
+        assert_eq!(stats["total_requests"], requests.len(), "{model}");
+        assert_eq!(stats["total_errors"], requests.len(), "{model}");
+        assert_eq!(stats["models"][model]["errors"], requests.len(), "{model}");
+    }
+
+    let app = buffered_responses_app(&upstream, "model/failed", false, true)?;
+    let (path, body) = &requests[0];
+    let response = send_with_headers(
+        &app,
+        "POST",
+        path,
+        Some(body.clone()),
+        &[("x-private-token", "test-private-credential")],
+    )
+    .await?;
+    assert_eq!(response.status, StatusCode::BAD_GATEWAY);
+    assert_eq!(
+        response.json()?["error"]["message"],
+        "provider rejected [REDACTED]"
+    );
+    assert_eq!(response.json()?["error"]["code"], "[REDACTED]");
+
+    let app = buffered_responses_app(&upstream, "model/failed", true, false)?;
+    for (path, body) in &requests {
+        let previous_calls = upstream.models().await.len();
+        let response = send(&app, "POST", path, Some(body.clone())).await?;
+        assert_eq!(response.status, StatusCode::OK, "{path}");
+        assert_eq!(response.json()?["model"], "model/fallback", "{path}");
+        assert_eq!(
+            &upstream.models().await[previous_calls..],
+            ["model/failed", "model/fallback"],
+            "{path}"
+        );
+    }
+    let stats = send(&app, "GET", "/v1/stats", None).await?.json()?;
+    assert_eq!(stats["models"]["model/failed"]["errors"], requests.len());
+    assert_eq!(stats["models"]["model/fallback"]["calls"], requests.len());
     Ok(())
 }
 
