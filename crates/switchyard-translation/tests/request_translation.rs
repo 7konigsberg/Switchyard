@@ -2884,3 +2884,112 @@ fn responses_parallel_custom_tool_calls_pair_with_their_outputs() -> TestResult 
     );
     Ok(())
 }
+
+// Verifies Chat image and file parts encode as wire-valid Responses input parts,
+// not serialized IR enums (image_url must be a string and file fields must be flat).
+#[test]
+fn openai_chat_image_and_file_parts_translate_to_valid_responses_input() -> TestResult {
+    let engine = TranslationEngine::default();
+    let body = json!({
+        "model": "gpt-4o",
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe these."},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64,YQ==", "detail": "high"}
+                },
+                {"type": "file", "file": {"file_id": "file_123"}},
+                {
+                    "type": "file",
+                    "file": {"file_data": "ZG9jdW1lbnQ=", "filename": "report.pdf"}
+                }
+            ]
+        }]
+    });
+
+    let output = engine
+        .translate_request(
+            WireFormat::OpenAiChat,
+            WireFormat::OpenAiResponses,
+            &body,
+            &TranslationPolicy::default(),
+        )?
+        .body;
+
+    assert_eq!(
+        output["input"][0]["content"],
+        json!([
+            {"type": "input_text", "text": "Describe these."},
+            {
+                "type": "input_image",
+                "image_url": "data:image/png;base64,YQ==",
+                "detail": "high"
+            },
+            {"type": "input_file", "file_id": "file_123"},
+            {
+                "type": "input_file",
+                "file_data": "ZG9jdW1lbnQ=",
+                "filename": "report.pdf"
+            }
+        ])
+    );
+    Ok(())
+}
+
+// Verifies Anthropic base64 media becomes valid Responses image and file parts.
+#[test]
+fn anthropic_base64_media_translates_to_responses() -> TestResult {
+    let engine = TranslationEngine::default();
+    let body = json!({
+        "model": "claude-sonnet-4-20250514",
+        "max_tokens": 64,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What is this?"},
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": "aW1hZ2U="
+                    }
+                },
+                {
+                    "type": "document",
+                    "title": "report.pdf",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": "ZG9jdW1lbnQ="
+                    }
+                }
+            ]
+        }]
+    });
+
+    let output = engine
+        .translate_request(
+            WireFormat::AnthropicMessages,
+            WireFormat::OpenAiResponses,
+            &body,
+            &TranslationPolicy::default(),
+        )?
+        .body;
+
+    assert_eq!(
+        output["input"][0]["content"],
+        json!([
+            {"type": "input_text", "text": "What is this?"},
+            {"type": "input_image", "image_url": "data:image/png;base64,aW1hZ2U="},
+            {
+                "type": "input_file",
+                "file_data": "ZG9jdW1lbnQ=",
+                "filename": "report.pdf"
+            }
+        ])
+    );
+    Ok(())
+}
