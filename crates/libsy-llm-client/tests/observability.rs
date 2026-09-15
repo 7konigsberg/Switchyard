@@ -34,24 +34,9 @@ use tracing_subscriber::layer::{Context as LayerContext, SubscriberExt};
 use tracing_subscriber::registry::LookupSpan;
 
 use switchyard_libsy::{
-    AffinityRouter,
-    Algorithm,
-    Classifier,
-    ClassifierContractConfig,
-    ClassifyTrigger,
-    DeescalationConfig,
-    Driver,
-    EscalationJudgeConfig,
-    LibsyError,
-    LlmClassifierConfig,
-    LlmTaskClassifier,
-    PickerMode,
-    RoutingOutcome,
-    RuntimeModels,
-    StageRouter,
-    StageRouterConfig,
-    Step,
-    TaskClassifierConfig,
+    Algorithm, ClassifierContractConfig, ClassifyTrigger, DeescalationConfig, Driver,
+    EscalationJudgeConfig, LibsyError, LlmClassifierConfig, LlmTaskClassifier, PickerMode,
+    RoutingOutcome, RuntimeModels, StageRouter, StageRouterConfig, Step, TaskClassifierConfig,
 };
 use switchyard_llm_client::{ClientRouter, RunObservation, RunObserver};
 use switchyard_protocol::{Category, ModelId};
@@ -781,9 +766,6 @@ async fn stateful_escalation_warns_once_without_a_session_id() -> switchyard_lib
     let (store, _, _, _, _) = telemetry();
     let event_count = store.events().len();
     let router = Arc::new(LlmTaskClassifier::new(LlmClassifierConfig::Escalation {
-        judge_target: "warning-judge".into(),
-        efficient_target: "warning-efficient".into(),
-        capable_target: "warning-capable".into(),
         contract: ClassifierContractConfig::default(),
         config: EscalationJudgeConfig::default(),
         max_output_tokens: 64,
@@ -794,7 +776,14 @@ async fn stateful_escalation_warns_once_without_a_session_id() -> switchyard_lib
     }) as Arc<dyn RoutedLlmClient>;
 
     for _ in 0..2 {
-        run(router.clone(), client.clone(), classifier_request()).await?;
+        switchyard_llm_client::run(
+            router.clone(),
+            ClientRouter::single(client.clone()),
+            classifier_request(),
+            classifier_models("warning-judge", "warning-efficient", "warning-capable"),
+            None,
+        )
+        .await?;
     }
 
     let warnings = store.events()[event_count..]
@@ -814,9 +803,6 @@ async fn stateful_escalation_warns_once_without_a_session_id() -> switchyard_lib
 #[tokio::test]
 async fn deescalation_evidence_stays_pending_until_confirmed() -> switchyard_libsy::Result<()> {
     let router = Arc::new(LlmTaskClassifier::new(LlmClassifierConfig::Escalation {
-        judge_target: "evidence-judge".into(),
-        efficient_target: "evidence-efficient".into(),
-        capable_target: "evidence-capable".into(),
         contract: ClassifierContractConfig::default(),
         config: EscalationJudgeConfig {
             confirmations: 1,
@@ -838,16 +824,20 @@ async fn deescalation_evidence_stays_pending_until_confirmed() -> switchyard_lib
     };
     let request = request_with_metadata("evidence-session", "evidence-correlation");
 
-    run(
+    let models = classifier_models("evidence-judge", "evidence-efficient", "evidence-capable");
+    switchyard_llm_client::run(
         router.clone(),
-        client(r#"{"escalate":true,"reason":"stuck"}"#),
+        ClientRouter::single(client(r#"{"escalate":true,"reason":"stuck"}"#)),
         request.clone(),
+        Arc::clone(&models),
+        None,
     )
     .await?;
     let outcome = switchyard_llm_client::decide(
         router,
         ClientRouter::single(client(r#"{"escalate":false,"reason":"recovered"}"#)),
         request,
+        models,
     )
     .await?;
 
