@@ -1534,7 +1534,7 @@ first user message share an affinity key. Prefer an explicit
 identifiers sent to the upstream provider. The route's <code>id</code>, <code>smart</code>, is the
 model name clients send to Switchyard.</p>
 <h2 id="how-the-decision-works">How the decision works<a class="headerlink" href="#how-the-decision-works" title="Permanent link">&para;</a></h2>
-<p>The classifier target returns a structured verdict containing:</p>
+<p>The classifier target, called the judge, returns a structured verdict containing:</p>
 <ul>
 <li><code>p_solve</code>: the estimated probability that the weak model completes the task.</li>
 <li><code>capability_boundary</code>: <code>supported</code>, <code>uncertain</code>, <code>unsupported</code>, or <code>unmatched</code>.</li>
@@ -1550,12 +1550,12 @@ greater than or equal to the applicable threshold. Otherwise it routes to
 <li><code>unsupported</code> uses <code>base_threshold + 2 * threshold_step</code>.</li>
 </ul>
 <p>An invalid, inconsistent, or unparseable verdict, or a judge failure, routes to
-<code>strong_target</code>. Raising either knob sends more traffic to the strong model.
-A judge call that has not answered within <code>timeout_ms</code> (default 10 seconds,
-client retries included) counts as a failure too: the route goes on without
-the verdict and records <code>reason=timeout</code> in the
-<code>switchyard_classifier_fail_open_total</code> counter, so a stalled judge provider
-never blocks the request.</p>
+<code>strong_target</code>. Raising either knob sends more traffic to the strong model.</p>
+<p><code>timeout_ms</code> limits the wait for a complete judge response, including retries
+and stream reading. It defaults to <code>10000</code> milliseconds and must be at least
+<code>1</code>. On timeout, the route uses <code>strong_target</code> and records <code>reason=timeout</code>
+in <code>switchyard_classifier_fail_open_total</code>. The caller's deadline must allow
+time for both classification and completion; lower <code>timeout_ms</code> if needed.</p>
 <h2 id="judge-model-compatibility">Judge model compatibility<a class="headerlink" href="#judge-model-compatibility" title="Permanent link">&para;</a></h2>
 <p>The judge must return complete, schema-valid JSON in normal assistant <code>content</code>.
 Switchyard does not parse provider-specific reasoning fields such as
@@ -1576,7 +1576,7 @@ for reasoning models. Other model/provider pairs may work with reasoning enabled
 or use a different control. Verify the judge response shape before deployment.
 If reasoning remains enabled, set <code>max_output_tokens</code> high enough for both the
 reasoning and final JSON. A truncated verdict has the same fail-open result. See
-the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/0d4e73999e328a3429aba6c5989e74c5150cd8a7/crates/switchyard-server/CONFIGURATION.md#add-an-llm-client-and-target">target-level <code>extra_body</code> reference</a>
+the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/a7d81471bc357f1c11ce778c935e0ae148a20b92/crates/switchyard-server/CONFIGURATION.md#add-an-llm-client-and-target">target-level <code>extra_body</code> reference</a>
 for the server merge behavior.</p>
 <h2 id="tuning-options">Tuning options<a class="headerlink" href="#tuning-options" title="Permanent link">&para;</a></h2>
 <table>
@@ -1631,7 +1631,7 @@ for the server merge behavior.</p>
 <tr>
 <td><code>timeout_ms</code></td>
 <td><code>10000</code></td>
-<td>Deadline for one judge call in milliseconds, client retries included. Past it the route fails open and records <code>reason=timeout</code>. Must be at least <code>1</code>.</td>
+<td>Maximum wait in milliseconds for a complete judge response, including retries and stream reading. On timeout, the route uses <code>strong_target</code> and records <code>reason=timeout</code>. Must be at least <code>1</code>.</td>
 </tr>
 </tbody>
 </table>

@@ -1981,7 +1981,7 @@ dependencies available in the active virtual environment.</p>
 <td><code>timeout_ms</code></td>
 <td style="text-align: center;">No</td>
 <td><code>10000</code></td>
-<td>Deadline for one judge call in milliseconds, client retries included. A judge that has not answered by then fails open: the route continues without a verdict and records <code>reason=timeout</code>. Must be at least <code>1</code>.</td>
+<td>Maximum wait in milliseconds for a complete judge response, including retries and stream reading. On timeout, the route uses its fallback choice and records <code>reason=timeout</code>. Must be at least <code>1</code>.</td>
 </tr>
 <tr>
 <td><code>response_format_type</code></td>
@@ -2286,7 +2286,7 @@ optional <code>handoff_notes</code> and <code>classifier</code> tables and for t
 <td><code>classifier.timeout_ms</code></td>
 <td style="text-align: center;">No</td>
 <td><code>10000</code></td>
-<td>Deadline for one classifier judge call in milliseconds, client retries included. Past it the route falls open to <code>picker</code> and records <code>reason=timeout</code>. Must be at least <code>1</code>.</td>
+<td>Maximum wait in milliseconds for a complete judge response, including retries and stream reading. On timeout, the route uses <code>picker</code> and records <code>reason=timeout</code>. Must be at least <code>1</code>.</td>
 </tr>
 <tr>
 <td><code>subagents</code></td>
@@ -2370,7 +2370,7 @@ configuration. Today a classifier sets the tier a stage router falls open to whe
 <td><code>classifier.timeout_ms</code></td>
 <td style="text-align: center;">No</td>
 <td><code>10000</code></td>
-<td>Deadline for one tier-judge call in milliseconds, client retries included. Past it the retained tier stands and the route records <code>reason=timeout</code>. Must be at least <code>1</code>.</td>
+<td>Maximum wait in milliseconds for a complete judge response, including retries and stream reading. On timeout, the route keeps the retained tier and records <code>reason=timeout</code>. Must be at least <code>1</code>.</td>
 </tr>
 <tr>
 <td><code>stage.capable_target</code></td>
