@@ -136,6 +136,12 @@ weak_cooldown_calls = 8
 
 With this table present, Switchyard marks judge input as either
 `EFFICIENT_EVALUATION` or `STRONG_EVALUATION`. In the strong phase,
+The strong-phase verdict is judged against the trouble that caused the
+escalation: the packaged rules release only once the failure that triggered the
+latch no longer shows in the recent results and the strong tier has verified its
+fix, and they retain while it is still diagnosing, editing, or has not yet run
+the confirming check.
+
 `escalate: true` keeps the strong tier. An `escalate: false` verdict can release
 the next request only after `strong_min_calls` is reached and the configured
 confirmation streak is complete. A timeout, error, or unparseable verdict
