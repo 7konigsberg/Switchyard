@@ -2241,6 +2241,12 @@ optional <code>handoff_notes</code> and <code>classifier</code> tables and for t
 <td>Trailing tool results the signals are computed over.</td>
 </tr>
 <tr>
+<td><code>capable_hold_turns</code></td>
+<td style="text-align: center;">No</td>
+<td><code>2</code></td>
+<td>Requests kept on the capable tier after escalation. A clean test pass clears the hold early; <code>0</code> disables it.</td>
+</tr>
+<tr>
 <td><code>tool_semantics.observe</code></td>
 <td style="text-align: center;">No</td>
 <td><code>[]</code></td>
@@ -2377,6 +2383,12 @@ configuration. Today a classifier sets the tier a stage router falls open to whe
 <td style="text-align: center;">No</td>
 <td><code>3</code></td>
 <td>Trailing tool results the signals are computed over.</td>
+</tr>
+<tr>
+<td><code>stage.capable_hold_turns</code></td>
+<td style="text-align: center;">No</td>
+<td><code>2</code></td>
+<td>Requests kept on the capable tier after escalation. A clean test pass clears the hold early; <code>0</code> disables it.</td>
 </tr>
 <tr>
 <td><code>stage.tool_semantics.observe</code></td>
