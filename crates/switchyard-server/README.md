@@ -142,6 +142,18 @@ are required. All configured semantic names use exact ASCII case-insensitive mat
 handoff notes, per-tier system prompts, and a capability-judge fallback are documented in
 [Stage-Router Routing](../../docs/routing_algorithms/stage_router_routing.md).
 
+## Codex model discovery
+
+`GET /v1/models` returns the standard `data` list and an empty Codex `models` list.
+Codex keeps its own model catalog and instructions. Select a Switchyard route explicitly
+with `codex --model route-id`; route aliases do not appear automatically in Codex's model
+picker. Unknown aliases use Codex's generic defaults and do not receive Switchyard's
+route-specific context limits or tool settings.
+
+To add instructions for a target, set `system_prompt` on its `[targets.<name>]` entry.
+Switchyard prepends that text when the selected target serves a completion and retains
+the caller's instructions. Omit the setting to add no target instructions.
+
 ## Endpoints
 
 | Method | Path | Purpose |

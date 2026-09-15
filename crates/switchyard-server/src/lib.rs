@@ -1482,11 +1482,8 @@ fn model_list_payload<'a>(
     json!({
         "object": "list",
         "data": entries.iter().map(|(model, caps)| model_entry_json(model, *caps)).collect::<Vec<_>>(),
-        "models": entries
-            .iter()
-            .enumerate()
-            .map(|(priority, (model, caps))| codex_model_entry_json(model, *caps, priority))
-            .collect::<Vec<_>>(),
+        // Codex requires this key; an empty list preserves its own catalog and instructions.
+        "models": [],
         "first_id": first_id,
         "last_id": last_id,
         "has_more": false,
@@ -1515,83 +1512,6 @@ fn model_entry_json(model: &str, capabilities: ModelCapabilities) -> Value {
             ],
         },
     })
-}
-
-// Builds the metadata Codex requires when it discovers models from a direct provider.
-//
-// This mirrors Codex's `ModelInfo` card. The benchmark harness builds the same card in
-// `benchmark/codex_model_catalog_lib.py`; keep the two in sync when Codex changes
-// the shape. Every field below is either derived from the route's declared capabilities or a
-// required `ModelInfo` field the server has no better value for.
-//
-// Two kinds of fields live here. context_window, tool_calling, and reasoning are model
-// facts a backend can publish; the route declares them in config today. The rest
-// (shell_type, apply_patch_tool_type, base_instructions, the reasoning-level presets,
-// truncation_policy) are Codex client conventions no backend returns, so they stay
-// constant.
-//
-// TODO: source context_window, tool_calling, and reasoning from the backend, not route
-// config. Switchyard is a proxy, so it should re-publish what the backend advertises
-// when it can — OpenRouter's /api/v1/models exposes context_length and
-// supported_parameters — and fall back to the route's declared value. Some backends
-// publish nothing (the NVIDIA gateway returns id-only models and blocks /model/info),
-// so keep failing closed to config.
-fn codex_model_entry_json(model: &str, capabilities: ModelCapabilities, priority: usize) -> Value {
-    // Codex is non-functional without shell and apply_patch, so an undeclared tool
-    // capability defaults to enabled here; the OpenAI `data` entry reports the raw
-    // Option separately for clients that want the undeclared state.
-    let tool_calling = capabilities.tool_calling.unwrap_or(true);
-    let reasoning = capabilities.reasoning.unwrap_or(false);
-    json!({
-        "slug": model,
-        "display_name": model,
-        "description": "Switchyard-routed model.",
-        "default_reasoning_level": if reasoning { json!("xhigh") } else { Value::Null },
-        "supported_reasoning_levels": if reasoning { reasoning_levels() } else { json!([]) },
-        "shell_type": if tool_calling { "shell_command" } else { "disabled" },
-        "visibility": "list",
-        "supported_in_api": true,
-        // Catalog list position (routes are listed in sorted id order), not a quality rank.
-        "priority": priority,
-        "additional_speed_tiers": [],
-        "availability_nux": null,
-        "upgrade": null,
-        // Required `ModelInfo` string. Unlike the launcher, the server cannot read
-        // Codex's bundled prompt, so it sends a minimal stub.
-        "base_instructions": "You are Codex, a coding agent.",
-        "supports_reasoning_summaries": reasoning,
-        "default_reasoning_summary": "none",
-        "support_verbosity": reasoning,
-        "default_verbosity": if reasoning { json!("low") } else { Value::Null },
-        "apply_patch_tool_type": if tool_calling { Some("freeform") } else { None },
-        "web_search_tool_type": "text",
-        "truncation_policy": {"mode": "tokens", "limit": 10_000},
-        "supports_parallel_tool_calls": tool_calling,
-        "supports_image_detail_original": false,
-        "context_window": capabilities.context_window,
-        "max_context_window": capabilities.context_window,
-        "effective_context_window_percent": 95,
-        "experimental_supported_tools": [],
-        // Codex omits an attached image client-side when this says text-only, so a
-        // route whose target can see must declare `vision = true`. Fails closed.
-        "input_modalities": if capabilities.vision.unwrap_or(false) {
-            json!(["text", "image"])
-        } else {
-            json!(["text"])
-        },
-        "supports_search_tool": false,
-    })
-}
-
-// The reasoning-effort presets Codex offers for a reasoning-capable route. Kept in
-// step with the benchmark template in `codex_model_catalog_lib.py`.
-fn reasoning_levels() -> Value {
-    json!([
-        {"effort": "low", "description": "Fast responses with lighter reasoning"},
-        {"effort": "medium", "description": "Balances speed and reasoning depth"},
-        {"effort": "high", "description": "Greater reasoning depth"},
-        {"effort": "xhigh", "description": "Extra high reasoning depth"},
-    ])
 }
 
 fn startup_banner(options: &ServerRunOptions, state: &ServerState, color: bool) -> String {
