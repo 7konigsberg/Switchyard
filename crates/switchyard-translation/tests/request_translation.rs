@@ -8,8 +8,8 @@ pub mod common;
 use pretty_assertions::assert_eq;
 use serde_json::{Value, json};
 use switchyard_translation::{
-    FormatId, LossyConversionPolicy, TranslationEngine, TranslationPolicy, WireFormat,
-    prepare_request_for_target, sanitize_anthropic_tool_use_id,
+    ContentBlock, FormatId, LossyConversionPolicy, TranslationEngine, TranslationPolicy,
+    WireFormat, prepare_request_for_target, sanitize_anthropic_tool_use_id,
 };
 
 use common::{REASONING_MODEL, normalized_policy, shell_tool_call};
@@ -3012,5 +3012,153 @@ fn anthropic_base64_media_translates_to_responses() -> TestResult {
             }
         ])
     );
+    Ok(())
+}
+
+// Verifies tool-result image and file content survives translation in both directions between
+// Anthropic Messages and OpenAI Responses.
+#[test]
+fn tool_result_media_survives_anthropic_and_responses_translation() -> TestResult {
+    let engine = TranslationEngine::default();
+    let image = json!({
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/png", "data": "aW1hZ2U="}
+    });
+    let document = json!({
+        "type": "document",
+        "title": "report.pdf",
+        "source": {"type": "base64", "media_type": "application/pdf", "data": "ZG9jdW1lbnQ="}
+    });
+    let anthropic_request = |content: Value| {
+        json!({
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 32,
+            "messages": [
+                {"role": "assistant", "content": [
+                    {"type": "tool_use", "id": "toolu_1", "name": "capture", "input": {}}
+                ]},
+                {"role": "user", "content": [
+                    {"type": "tool_result", "tool_use_id": "toolu_1", "content": content}
+                ]}
+            ]
+        })
+    };
+    let to_responses = |body: &Value| -> TestResult<Value> {
+        let output = engine
+            .translate_request(
+                WireFormat::AnthropicMessages,
+                WireFormat::OpenAiResponses,
+                body,
+                &TranslationPolicy::default(),
+            )?
+            .body;
+        Ok(output["input"][1]["output"].clone())
+    };
+
+    // Anthropic -> Responses: typed parts, an image-only result, and unchanged plain text.
+    assert_eq!(
+        to_responses(&anthropic_request(json!([
+            {"type": "text", "text": "media attached"},
+            image,
+            document
+        ])))?,
+        json!([
+            {"type": "input_text", "text": "media attached"},
+            {"type": "input_image", "image_url": "data:image/png;base64,aW1hZ2U="},
+            {"type": "input_file", "file_data": "ZG9jdW1lbnQ=", "filename": "report.pdf"}
+        ])
+    );
+    assert_eq!(
+        to_responses(&anthropic_request(json!([image])))?,
+        json!([{"type": "input_image", "image_url": "data:image/png;base64,aW1hZ2U="}])
+    );
+    assert_eq!(
+        to_responses(&anthropic_request(json!("plain")))?,
+        json!("plain")
+    );
+
+    // Responses -> Anthropic: typed blocks instead of one JSON string.
+    let body = json!({
+        "model": "gpt-5.2",
+        "input": [
+            {"type": "function_call", "call_id": "call_1", "name": "capture", "arguments": "{}"},
+            {"type": "function_call_output", "call_id": "call_1", "output": [
+                {"type": "input_text", "text": "media attached"},
+                {"type": "input_image", "image_url": "data:image/png;base64,aW1hZ2U=", "detail": "low"},
+                {"type": "input_file", "file_data": "ZG9jdW1lbnQ=", "filename": "report.pdf"}
+            ]}
+        ]
+    });
+    let output = engine
+        .translate_request(
+            WireFormat::OpenAiResponses,
+            WireFormat::AnthropicMessages,
+            &body,
+            &TranslationPolicy::default(),
+        )?
+        .body;
+    let result = &output["messages"][1]["content"][0];
+    assert_eq!(result["type"], "tool_result");
+    assert_eq!(result["tool_use_id"], "call_1");
+    assert_eq!(
+        result["content"],
+        json!([
+            {"type": "text", "text": "media attached"},
+            {
+                "type": "image",
+                "source": {"type": "base64", "media_type": "image/png", "data": "aW1hZ2U="}
+            },
+            {
+                "type": "document",
+                "source": {"type": "base64", "data": "ZG9jdW1lbnQ=", "filename": "report.pdf"}
+            }
+        ])
+    );
+    Ok(())
+}
+
+// Verifies Responses tool outputs answering calls held behind `previous_response_id` stay
+// tool results, so a user-turn classifier does not treat them as a new user message, and
+// re-encode with their original item types.
+#[test]
+fn responses_stored_tool_outputs_stay_tool_results() -> TestResult {
+    let engine = TranslationEngine::default();
+    let outputs = json!([
+        {"type": "function_call_output", "call_id": "call_weather", "output": "sunny"},
+        {"type": "custom_tool_call_output", "call_id": "call_shell", "output": "README.md"}
+    ]);
+    let body = json!({
+        "model": "gpt-5.2",
+        "previous_response_id": "resp_1",
+        "input": outputs
+    });
+
+    let request = engine
+        .decode_request(
+            WireFormat::OpenAiResponses,
+            &body,
+            &TranslationPolicy::default(),
+        )?
+        .request;
+    let tool_call_ids = request
+        .messages
+        .iter()
+        .flat_map(|message| &message.content)
+        .map(|block| match block {
+            ContentBlock::ToolResult(result) => Ok(result.tool_call_id.as_str()),
+            other => Err(format!("expected a tool result, got {other:?}")),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(tool_call_ids, ["call_weather", "call_shell"]);
+
+    let output = engine
+        .translate_request(
+            WireFormat::OpenAiResponses,
+            WireFormat::OpenAiResponses,
+            &body,
+            &normalized_policy(),
+        )?
+        .body;
+    assert_eq!(output["input"], outputs);
     Ok(())
 }
