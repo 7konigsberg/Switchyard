@@ -1691,10 +1691,22 @@ route reaches no upstream. A file without a <code>[targets]</code> table is reje
 <td><code>2</code></td>
 <td>Retry budget, <code>0</code>–<code>10</code>.</td>
 </tr>
+<tr>
+<td><code>timeout_ms</code></td>
+<td style="text-align: center;">No</td>
+<td>unset</td>
+<td>Deadline in milliseconds for one call through this client, retries and retry delays included, until the response arrives: the whole body of a buffered response, or the first event of a streamed one. Must be at least <code>1</code>. Unset waits as long as the upstream takes.</td>
+</tr>
 </tbody>
 </table>
 <p>The TOML never contains the secret itself. <code>api_key_env</code> names a variable that
 must exist and be non-empty when the server loads.</p>
+<p><code>timeout_ms</code> bounds every call through the client, judge verdicts and answers alike.
+A streamed response is not bounded once its first event has arrived. To give a
+classifier judge a short deadline without limiting the answering models, put the
+judge on its own <code>[llm_clients]</code> entry; two entries may share a <code>base_url</code>. When the
+deadline passes, the call fails with a timeout: a judge call falls open to the
+route's fallback target, and an answer call returns <code>504</code> to the caller.</p>
 <p>Set <code>forward_auth = true</code> to use each caller's credential instead of a
 server-owned key:</p>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[llm_clients.claude]</span>
@@ -1793,12 +1805,6 @@ Token-count requests do not apply target system prompts.</p>
 <td>Routing algorithm for this route.</td>
 </tr>
 <tr>
-<td><code>judge_timeout_ms</code></td>
-<td style="text-align: center;">No</td>
-<td><code>10000</code></td>
-<td>Maximum wait in milliseconds for each judge response, including candidate attempts, retries, retry delays, and reading the complete response. Must be at least <code>1</code>. On timeout, the client returns an error and the algorithm routes without a verdict.</td>
-</tr>
-<tr>
 <td><code>context_window</code></td>
 <td style="text-align: center;">No</td>
 <td>unset</td>
@@ -1824,13 +1830,6 @@ Token-count requests do not apply target system prompts.</p>
 </tr>
 </tbody>
 </table>
-<p>A judge is a classifier model that helps select the answering model. The client
-applies the route's <code>judge_timeout_ms</code> separately to each judge call made by
-<code>llm_classifier</code>, <code>stage_router</code>, <code>composite</code>, or classifiers under <code>subagents</code>.
-Set it directly under <code>[routes.&lt;name&gt;]</code>, before any nested classifier table.
-This setting does not limit answer generation, including escalation's initial
-answer. On timeout, the classifier records <code>reason=timeout</code> in
-<code>switchyard_classifier_fail_open_total</code>.</p>
 <h3 id="noop"><code>noop</code><a class="headerlink" href="#noop" title="Permanent link">&para;</a></h3>
 <p>Returns a buffered assistant response containing <code>OK</code> without calling an
 upstream model. Use it for local smoke tests.</p>
@@ -2254,6 +2253,12 @@ optional <code>handoff_notes</code> and <code>classifier</code> tables and for t
 <td>Trailing tool results the signals are computed over.</td>
 </tr>
 <tr>
+<td><code>capable_hold_turns</code></td>
+<td style="text-align: center;">No</td>
+<td><code>2</code></td>
+<td>Requests kept on the capable tier after escalation. A clean test pass clears the hold early; <code>0</code> disables it.</td>
+</tr>
+<tr>
 <td><code>tool_semantics.observe</code></td>
 <td style="text-align: center;">No</td>
 <td><code>[]</code></td>
@@ -2390,6 +2395,12 @@ configuration. Today a classifier sets the tier a stage router falls open to whe
 <td style="text-align: center;">No</td>
 <td><code>3</code></td>
 <td>Trailing tool results the signals are computed over.</td>
+</tr>
+<tr>
+<td><code>stage.capable_hold_turns</code></td>
+<td style="text-align: center;">No</td>
+<td><code>2</code></td>
+<td>Requests kept on the capable tier after escalation. A clean test pass clears the hold early; <code>0</code> disables it.</td>
 </tr>
 <tr>
 <td><code>stage.tool_semantics.observe</code></td>

@@ -825,23 +825,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="How the decision works">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#python-hosts" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Python hosts
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
         <li class="md-nav__item">
@@ -1395,23 +1378,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="How the decision works">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#python-hosts" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Python hosts
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
         <li class="md-nav__item">
@@ -1568,7 +1534,7 @@ first user message share an affinity key. Prefer an explicit
 identifiers sent to the upstream provider. The route's <code>id</code>, <code>smart</code>, is the
 model name clients send to Switchyard.</p>
 <h2 id="how-the-decision-works">How the decision works<a class="headerlink" href="#how-the-decision-works" title="Permanent link">&para;</a></h2>
-<p>The classifier target, called the judge, returns a structured verdict containing:</p>
+<p>The classifier target returns a structured verdict containing:</p>
 <ul>
 <li><code>p_solve</code>: the estimated probability that the weak model completes the task.</li>
 <li><code>capability_boundary</code>: <code>supported</code>, <code>uncertain</code>, <code>unsupported</code>, or <code>unmatched</code>.</li>
@@ -1585,25 +1551,15 @@ greater than or equal to the applicable threshold. Otherwise it routes to
 </ul>
 <p>An invalid, inconsistent, or unparseable verdict, or a judge failure, routes to
 <code>strong_target</code>. Raising either knob sends more traffic to the strong model.</p>
-<p><code>judge_timeout_ms</code>, set directly under <code>[routes.&lt;name&gt;]</code>, limits the client's
-wait for a complete judge response. One deadline covers candidate attempts,
-retries, retry delays, and reading the full response stream. It defaults to
-<code>10000</code> milliseconds and must be at least <code>1</code>. The client reports a timeout to
-the routing algorithm, which uses <code>strong_target</code> and records <code>reason=timeout</code>
-in <code>switchyard_classifier_fail_open_total</code>. Allow time in the caller's deadline
-for both classification and answer generation; lower <code>judge_timeout_ms</code> if needed.</p>
-<h3 id="python-hosts">Python hosts<a class="headerlink" href="#python-hosts" title="Permanent link">&para;</a></h3>
-<p>When driving <code>Algorithm.run_stream()</code> from Python, your application runs the
-upstream client and enforces its deadlines. <code>ModelCall.category == "judge"</code>
-identifies a verdict call, even if that model also generates answers. Apply one
-deadline to the client call, retries, and reading the complete verdict. Report
-a timeout while waiting for a buffered response with <code>call.fail(TimeoutError(...))</code>.
-A normalized response stream can raise <code>TimeoutError</code> while being read. Either
-error lets the classifier continue without a verdict. The Python classifier
-constructors do not accept a timeout setting.</p>
-<p>If the routing run was cancelled before the client finished, <code>call.respond()</code>
-and <code>call.fail()</code> ignore the late reply. Calling either method a second time
-on the same <code>ModelCall</code> still raises <code>LibsyError</code>.</p>
+<p>A judge that accepts the request and never answers is a failure only if its
+client has a deadline. Set <code>timeout_ms</code> on the judge's <code>[llm_clients]</code> entry
+(see the <a href="../../reference/toml_schema/">TOML schema</a>); it covers the judge's
+retries and the complete verdict body. When it passes, the route uses
+<code>strong_target</code> and records <code>reason=timeout</code> in
+<code>switchyard_classifier_fail_open_total</code>. The deadline applies to every call
+through that client, so give the judge its own entry when the answering models
+use the same provider. Without a deadline the request waits as long as the
+judge does.</p>
 <h2 id="judge-model-compatibility">Judge model compatibility<a class="headerlink" href="#judge-model-compatibility" title="Permanent link">&para;</a></h2>
 <p>The judge must return complete, schema-valid JSON in normal assistant <code>content</code>.
 Switchyard does not parse provider-specific reasoning fields such as
@@ -1624,7 +1580,7 @@ for reasoning models. Other model/provider pairs may work with reasoning enabled
 or use a different control. Verify the judge response shape before deployment.
 If reasoning remains enabled, set <code>max_output_tokens</code> high enough for both the
 reasoning and final JSON. A truncated verdict has the same fail-open result. See
-the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/b74b524696d58094d62b67253464ea16206bc51f/crates/switchyard-server/CONFIGURATION.md#add-an-llm-client-and-target">target-level <code>extra_body</code> reference</a>
+the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/a2aec8a652de8c11044faf7bb889cd7871e23663/crates/switchyard-server/CONFIGURATION.md#add-an-llm-client-and-target">target-level <code>extra_body</code> reference</a>
 for the server merge behavior.</p>
 <h2 id="tuning-options">Tuning options<a class="headerlink" href="#tuning-options" title="Permanent link">&para;</a></h2>
 <table>
@@ -1675,11 +1631,6 @@ for the server merge behavior.</p>
 <td><code>max_output_tokens</code></td>
 <td><code>4096</code></td>
 <td>Maximum completion tokens available to the classifier verdict. Must be at least <code>1</code>.</td>
-</tr>
-<tr>
-<td><code>judge_timeout_ms</code></td>
-<td><code>10000</code></td>
-<td>Maximum wait in milliseconds for a complete judge response, including retries and stream reading. On timeout, the route uses <code>strong_target</code> and records <code>reason=timeout</code>. Must be at least <code>1</code>.</td>
 </tr>
 </tbody>
 </table>
