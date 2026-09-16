@@ -1204,8 +1204,8 @@
   
 
 
-<p>Prefill router runs the request through <code>vllm</code> all the way to first token and extracts various signals. It uses those signals as input to a classifier (which you have to train). That classifier picks the model. This is a variation on using embeddings as input to the classifier.</p>
-<p>This makes it different from the other routers in that it both requires running an inference server (<code>vllm</code>) and training a classifier for the two specific models you intend to use and the specific workload you will send it. This makes it much more complex to deploy than the other routers, but potentially better if you know your workload.</p>
+<p>Prefill router runs the request through <code>pytorch</code> and <code>transformers</code> to get hidden states. It uses those states as input to a classifier which you have to train. For each model the classifier predicts if it will succeed at the task. This is a variation on using embeddings as input to the classifier.</p>
+<p>This makes it different from the other routers in that it both requires running inference (with <code>transformers</code>) and training a classifier for the specific models you intend to use and the specific workload you will send it. This makes it much more complex to deploy than the other routers, but potentially better if you know your workload.</p>
 <h1 id="how-do-i-use-prefill-router">How do I use Prefill Router?<a class="headerlink" href="#how-do-i-use-prefill-router" title="Permanent link">&para;</a></h1>
 <ol>
 <li>Define a model pool/ workload for routing</li>
