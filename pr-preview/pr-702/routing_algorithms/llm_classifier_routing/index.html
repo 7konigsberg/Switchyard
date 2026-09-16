@@ -1549,17 +1549,17 @@ greater than or equal to the applicable threshold. Otherwise it routes to
 <li><code>uncertain</code> and <code>unmatched</code> use <code>base_threshold + threshold_step</code>.</li>
 <li><code>unsupported</code> uses <code>base_threshold + 2 * threshold_step</code>.</li>
 </ul>
-<p>An invalid, inconsistent, or unparseable verdict, or a judge failure, routes to
+<p>An invalid, inconsistent, or unparseable verdict routes to
 <code>strong_target</code>. Raising either knob sends more traffic to the strong model.</p>
-<p>A judge that accepts the request and never answers is a failure only if its
-client has a deadline. Set <code>timeout_ms</code> on the judge's <code>[llm_clients]</code> entry
+<p>To stop waiting for a judge that accepts the request but never finishes its
+response, set <code>timeout_ms</code> on the judge's <code>[llm_clients]</code> entry
 (see the <a href="../../reference/toml_schema/">TOML schema</a>); it covers the judge's
-retries and the complete verdict body. When it passes, the route uses
-<code>strong_target</code> and records <code>reason=timeout</code> in
-<code>switchyard_classifier_fail_open_total</code>. The deadline applies to every call
-through that client, so give the judge its own entry when the answering models
-use the same provider. Without a deadline the request waits as long as the
-judge does.</p>
+retries and the complete verdict body. When the deadline expires, the Rust server returns
+<code>504</code> without calling <code>strong_target</code> or <code>weak_target</code>. Other HTTP client failures
+also stop routing after retries. The deadline applies to every call
+through that client. Give the judge its own entry if the answering models need a
+different deadline, even when they use the same provider. Without a deadline,
+the request can wait indefinitely for the judge.</p>
 <h2 id="judge-model-compatibility">Judge model compatibility<a class="headerlink" href="#judge-model-compatibility" title="Permanent link">&para;</a></h2>
 <p>The judge must return complete, schema-valid JSON in normal assistant <code>content</code>.
 Switchyard does not parse provider-specific reasoning fields such as
@@ -1580,7 +1580,7 @@ for reasoning models. Other model/provider pairs may work with reasoning enabled
 or use a different control. Verify the judge response shape before deployment.
 If reasoning remains enabled, set <code>max_output_tokens</code> high enough for both the
 reasoning and final JSON. A truncated verdict has the same fail-open result. See
-the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/a2aec8a652de8c11044faf7bb889cd7871e23663/crates/switchyard-server/CONFIGURATION.md#add-an-llm-client-and-target">target-level <code>extra_body</code> reference</a>
+the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/3130d69264144f44b8ecce24bbb91579b8d61949/crates/switchyard-server/CONFIGURATION.md#add-an-llm-client-and-target">target-level <code>extra_body</code> reference</a>
 for the server merge behavior.</p>
 <h2 id="tuning-options">Tuning options<a class="headerlink" href="#tuning-options" title="Permanent link">&para;</a></h2>
 <table>
