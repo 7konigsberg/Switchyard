@@ -1605,7 +1605,7 @@ for reasoning models. Other model/provider pairs may work with reasoning enabled
 or use a different control. Verify the judge response shape before deployment.
 If reasoning remains enabled, set <code>max_output_tokens</code> high enough for both the
 reasoning and final JSON. A truncated verdict has the same fail-open result. See
-the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/3f5c348e7eea03b7b4aea3d53afb7b835e69f546/crates/switchyard-server/CONFIGURATION.md#add-an-llm-client-and-target">target-level <code>extra_body</code> reference</a>
+the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/4aeaceb96f3b3c79de137f6207f417ddeb38fdb4/crates/switchyard-server/CONFIGURATION.md#add-an-llm-client-and-target">target-level <code>extra_body</code> reference</a>
 for the server merge behavior.</p>
 <h2 id="tuning-options">Tuning options<a class="headerlink" href="#tuning-options" title="Permanent link">&para;</a></h2>
 <table>
@@ -1787,10 +1787,28 @@ returned by <code>/v1/decision</code>. It does not record Chat Completions or An
 Messages response IDs as Responses continuation IDs. A provider's <code>store</code> value
 takes precedence over the request value. If that value is <code>false</code>, Switchyard
 skips the response ID but still records the conversation ID.</p>
-<p>Each route keeps at most 65,536 ID-to-model records in memory, with no transcript
-storage. A restart removes all records. Unknown or evicted IDs use normal
-routing and can still fail at the selected provider. To keep dynamic routing
-across turns, send the full history instead of an ID.</p>
+<p>Each route keeps up to 65,536 distinct ID-to-model records per process. This
+limit counts response and conversation IDs recorded over the process's lifetime,
+not tokens or simultaneous requests. Records do not expire, and Switchyard does
+not remove older records to make room. The map stores copies of IDs and model
+names, with no transcript storage.</p>
+<p>If recording new IDs would exceed the limit, a buffered reply returns HTTP 503
+with code <code>response_state_limit_exceeded</code>. If an ID is already recorded for a
+different model, it returns HTTP 409 with code <code>response_state_conflict</code>. Neither
+failure changes existing records. Switchyard checks both IDs before adding
+either from a response or stream event.</p>
+<p>These checks run after the provider has returned a response or stream event, so
+the error does not mean the provider did no work. A stream that has already sent
+HTTP headers emits a framed error and stops; it cannot change the HTTP status.
+Switchyard logs these errors. For <code>/v1/responses</code>, buffered and streamed failures
+increment <code>/v1/stats</code> <code>total_errors</code>. Other routes continue independently.</p>
+<p>An existing ID can still be used at capacity if the reply adds no new IDs. For
+example, <code>store: false</code> can suppress a new response ID, but it does not suppress
+conversation-ID tracking. A stored follow-up normally creates a new response ID
+and therefore fails when the map is full.</p>
+<p>A restart removes all records, and each replica has its own map. Unknown IDs use
+normal routing and can still fail at the selected provider. To keep dynamic
+routing across turns, send the full history instead of an ID.</p>
 <h2 id="run-the-route">Run the route<a class="headerlink" href="#run-the-route" title="Permanent link">&para;</a></h2>
 <p>After <a href="../../getting_started/#install-the-server">installing the Rust server</a>, export
 the provider credential, validate the configuration, and start the release
