@@ -1905,6 +1905,14 @@ see <a href="../../routing_algorithms/subagent_routing/">Sub-Agent-Aware Routing
 </tbody>
 </table>
 <h3 id="prefill_router"><code>prefill_router</code><a class="headerlink" href="#prefill_router" title="Permanent link">&para;</a></h3>
+<div class="admonition warning">
+<p class="admonition-title">Experimental in v0.3.0</p>
+<p>Switchyard v0.3.0 does not provide or support a router checkpoint, an
+exporter, or compatible encoder assets. You must obtain or train a compatible
+checkpoint and obtain its encoder and tokenizer yourself. There is no
+supported end-to-end checkpoint export and compatibility contract.
+The example below shows configuration syntax, not a ready-to-run deployment.</p>
+</div>
 <p>Routes the latest non-empty user message with a checkpoint-backed prefill classifier. Build
 <code>switchyard-server</code> with <code>--features prefill-router</code> and make the prefill router's Python
 dependencies available in the active virtual environment.</p>
