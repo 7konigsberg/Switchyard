@@ -271,6 +271,29 @@ String values longer than 64 bytes are omitted and should be stable, non-sensiti
 
 ## Failure policy
 
+### Provider credential redaction
+
+The plugin replaces configured `api_key_env` credentials with `[REDACTED]` in
+buffered responses and each translated stream event before returning them to
+Relay. It also redacts returned error strings, routing mark data and metadata,
+metric attributes and metadata, and plugin telemetry-emission diagnostics.
+The intended upstream still receives the original credential. Upstream response
+headers are not returned through the plugin's JSON execution intercepts.
+
+The plugin and standalone server share the credential replacement helpers.
+Redaction runs after translation, including on preserved provider fields and
+JSON member names. It does not buffer the response stream or change cancellation.
+Each event is handled independently: a credential split across events or separate
+JSON strings is **not** reconstructed or redacted as a whole. String values and error
+text are checked for both raw credentials and their JSON-escaped forms, including
+one embedded JSON serialization layer such as serialized tool arguments. Further
+repeated escaping and other encodings or transformations are outside this policy.
+Preventing reconstruction across stream events requires a separate stateful policy
+for each logical text or tool argument field; per-event redaction does not provide
+that guarantee.
+
+### Execution failures
+
 `switchyard-llm-client` owns provider retry and route-candidate fallback
 behavior. The plugin does not maintain a separate trusted-default target or
 rerun routing after an execution failure. Failures outside the shared runner,
