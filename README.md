@@ -163,6 +163,8 @@ The complete runnable version — streaming and a working client — is
 
 You finish with a server on `localhost:4000` that any OpenAI or Anthropic client
 can call. Needs [Rust with Cargo](https://rust-lang.org/tools/install/).
+For v0.3.0, the standalone server is release-validated on Ubuntu 24.04,
+Linux x86_64. Other platforms are outside the release-validation scope.
 
 **1. Install the server.**
 
@@ -230,8 +232,14 @@ tokens, and routing overhead.
 ```bash
 export ANTHROPIC_BASE_URL="http://localhost:4000"
 export ANTHROPIC_MODEL="switchyard"
+export ANTHROPIC_API_KEY="placeholder"  # pragma: allowlist secret
 claude
 ```
+
+The placeholder satisfies Claude Code's client-side auth check. In this local
+setup, Switchyard uses the server's `OPENROUTER_API_KEY` for upstream requests.
+Do not use the placeholder with `forward_auth = true` or a gateway that requires
+a real client credential.
 
 Codex CLI and other OpenAI clients use the OpenAI variables instead:
 
