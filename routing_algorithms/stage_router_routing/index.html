@@ -14,7 +14,7 @@
         <link rel="prev" href="../llm_classifier_routing/">
       
       
-        <link rel="next" href="../composite_routing/">
+        <link rel="next" href="../subagent_routing/">
       
       
         
@@ -25,7 +25,7 @@
     
     
       
-        <title>Stage-Router Routing - Switchyard</title>
+        <title>Execution (Stage Router) - Switchyard</title>
       
     
     
@@ -114,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Stage-Router Routing
+              Execution (Stage Router)
             
           </span>
         </div>
@@ -688,62 +688,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../subagent_routing/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Sub-Agent-Aware Routing
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../random_routing/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Random Routing
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../llm_classifier_routing/" class="md-nav__link">
         
   
@@ -751,7 +695,7 @@
   <span class="md-ellipsis">
     
   
-    LLM Classifier Routing
+    Task (LLM Classifier)
   
 
     
@@ -788,7 +732,7 @@
   <span class="md-ellipsis">
     
   
-    Stage-Router Routing
+    Execution (Stage Router)
   
 
     
@@ -806,7 +750,7 @@
   <span class="md-ellipsis">
     
   
-    Stage-Router Routing
+    Execution (Stage Router)
   
 
     
@@ -987,6 +931,62 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../subagent_routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sub-Agent-Aware Routing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../random_routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Random Routing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1568,6 +1568,8 @@
 
 
 <h1 id="stage-router-routing">Stage-Router Routing<a class="headerlink" href="#stage-router-routing" title="Permanent link">&para;</a></h1>
+<p><strong>Execution</strong> routing uses the stage router to choose a model from tool results
+and agent progress. Configure it with <code>type = "stage_router"</code>.</p>
 <p>Stage-router routing sends each request to either a <strong>capable</strong> model or a
 cheaper <strong>efficient</strong> one, depending on where the agent is in its run. The goal
 is to spend the capable model on the turns that need it (exploration, error
