@@ -196,6 +196,19 @@ impl FormatCodec for OpenAiChatCodec {
         }
         let mut diagnostics = Vec::new();
         validate_request_capabilities(request, &mut diagnostics, policy)?;
+        let allowed = match &request.tool_choice {
+            Some(ToolChoice::Raw(choice))
+                if choice.get("type").and_then(Value::as_str) == Some("allowed_tools")
+                    && choice.get("allowed_tools").is_some() =>
+            {
+                None
+            }
+            _ => crate::codecs::common::allowed_function_tools(request)?,
+        };
+        let (tools, tool_choice) = allowed.as_ref().map_or(
+            (request.tools.as_slice(), request.tool_choice.as_ref()),
+            |(tools, choice)| (tools.as_slice(), Some(choice)),
+        );
         let mut body = Map::new();
         if let Some(model) = &request.model {
             body.insert("model".to_string(), Value::String(model.clone()));
@@ -217,9 +230,9 @@ impl FormatCodec for OpenAiChatCodec {
         }
         body.insert("messages".to_string(), Value::Array(messages));
 
-        if !request.tools.is_empty() {
-            body.insert("tools".to_string(), encode_openai_tools(&request.tools));
-            if let Some(choice) = &request.tool_choice {
+        if !tools.is_empty() {
+            body.insert("tools".to_string(), encode_openai_tools(tools));
+            if let Some(choice) = tool_choice {
                 body.insert("tool_choice".to_string(), encode_openai_tool_choice(choice));
             }
         }

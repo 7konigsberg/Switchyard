@@ -210,6 +210,11 @@ impl FormatCodec for AnthropicMessagesCodec {
         }
         let mut diagnostics = Vec::new();
         validate_request_capabilities(request, &mut diagnostics, policy)?;
+        let allowed = crate::codecs::common::allowed_function_tools(request)?;
+        let (tools, tool_choice) = allowed.as_ref().map_or(
+            (request.tools.as_slice(), request.tool_choice.as_ref()),
+            |(tools, choice)| (tools.as_slice(), Some(choice)),
+        );
         let mut body = Map::new();
         if let Some(model) = &request.model {
             body.insert("model".to_string(), Value::String(model.clone()));
@@ -237,20 +242,16 @@ impl FormatCodec for AnthropicMessagesCodec {
             )?),
         );
 
-        if !request.tools.is_empty() {
-            body.insert("tools".to_string(), encode_anthropic_tools(&request.tools));
+        if !tools.is_empty() {
+            body.insert("tools".to_string(), encode_anthropic_tools(tools));
         }
         let parallel_tool_calls = request
             .extensions
             .fields
             .get("parallel_tool_calls")
             .and_then(Value::as_bool);
-        if request.tool_choice.is_some()
-            || (parallel_tool_calls.is_some() && !request.tools.is_empty())
-        {
-            let mut choice = encode_anthropic_tool_choice(
-                request.tool_choice.as_ref().unwrap_or(&ToolChoice::Auto),
-            );
+        if tool_choice.is_some() || (parallel_tool_calls.is_some() && !tools.is_empty()) {
+            let mut choice = encode_anthropic_tool_choice(tool_choice.unwrap_or(&ToolChoice::Auto));
             if let Some(is_enabled) = parallel_tool_calls
                 && let Some(object) = choice.as_object_mut()
                 && object.get("type").and_then(Value::as_str) != Some("none")
