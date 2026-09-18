@@ -1822,19 +1822,19 @@ Token-count requests do not apply target system prompts.</p>
 <td><code>tool_calling</code></td>
 <td style="text-align: center;">No</td>
 <td>unset</td>
-<td>Whether <code>GET /v1/models</code> advertises tool-calling support for this route. Unset values appear as <code>null</code>.</td>
+<td>Tool-calling support advertised by <code>GET /v1/models</code>. When <code>false</code>, the server rejects tool definitions, tool controls, and tool history with HTTP 400 before dispatch. Unset values appear as <code>null</code>. Explicit <code>true</code> and unset values do not restrict requests.</td>
 </tr>
 <tr>
 <td><code>reasoning</code></td>
 <td style="text-align: center;">No</td>
 <td>unset</td>
-<td>Declared reasoning support, stored in route metadata. The server does not include it in <code>GET /v1/models</code>.</td>
+<td>When <code>false</code>, the server rejects reasoning controls with HTTP 400 before dispatch. Explicit <code>true</code> and unset values do not restrict requests. The server does not include this declaration in <code>GET /v1/models</code>.</td>
 </tr>
 <tr>
 <td><code>vision</code></td>
 <td style="text-align: center;">No</td>
 <td>unset</td>
-<td>Image-input support advertised in <code>GET /v1/models</code> under <code>data[].capabilities.vision</code>. Unset values appear as <code>null</code>. Declare <code>true</code> only when every target the route can select accepts images.</td>
+<td>Image-input support advertised in <code>GET /v1/models</code> under <code>data[].capabilities.vision</code>. When <code>false</code>, the server rejects images with HTTP 400 before dispatch, including images in tool results. Unset values appear as <code>null</code>. Explicit <code>true</code> and unset values do not restrict requests. Declare <code>true</code> only when every target the route can select accepts images.</td>
 </tr>
 </tbody>
 </table>
