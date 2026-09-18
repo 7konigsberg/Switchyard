@@ -297,7 +297,7 @@
 <a href=#297 id=297 data-nosnippet>297</a><span class="doccomment">/// One provider-neutral streaming response chunk.
 <a href=#298 id=298 data-nosnippet>298</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 <a href=#299 id=299 data-nosnippet>299</a></span><span class="kw">pub enum </span>LlmResponseChunk {
-<a href=#300 id=300 data-nosnippet>300</a>    <span class="doccomment">/// Starts a response message.
+<a href=#300 id=300 data-nosnippet>300</a>    <span class="doccomment">/// Starts a response message, or fills in identity first supplied by a later frame.
 <a href=#301 id=301 data-nosnippet>301</a>    </span>MessageStart {
 <a href=#302 id=302 data-nosnippet>302</a>        <span class="doccomment">/// Provider response identifier.
 <a href=#303 id=303 data-nosnippet>303</a>        </span>id: <span class="prelude-ty">Option</span>&lt;String&gt;,
