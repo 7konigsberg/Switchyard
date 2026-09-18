@@ -1800,6 +1800,36 @@ invented as zero. Available counts are capped at OTel's signed integer maximum.<
 <td>Logical call duration in milliseconds; see streaming limits below.</td>
 </tr>
 <tr>
+<td><code>switchyard.total_requests</code></td>
+<td>ObservableGauge</td>
+<td>none</td>
+<td>Process-wide total of successful and failed answer candidates after routing, including reused routing responses.</td>
+</tr>
+<tr>
+<td><code>switchyard.total_errors</code></td>
+<td>ObservableGauge</td>
+<td>none</td>
+<td>Process-wide total of failures after routing, including failed answer candidates and reused routing responses.</td>
+</tr>
+<tr>
+<td><code>switchyard.requests</code></td>
+<td>Counter</td>
+<td><code>model</code></td>
+<td>Successful answer candidates or reused routing responses, by model ID.</td>
+</tr>
+<tr>
+<td><code>switchyard.errors</code></td>
+<td>Counter</td>
+<td><code>model</code></td>
+<td>Failed answer candidates or reused routing responses, by model ID.</td>
+</tr>
+<tr>
+<td><code>switchyard.model_call_latency_ms</code></td>
+<td>Histogram</td>
+<td><code>model</code></td>
+<td>Successful answer-candidate duration in milliseconds, including that candidate's retries and stream consumption. Excludes routing time and reused routing responses.</td>
+</tr>
+<tr>
 <td><code>switchyard.routing_overhead_ms</code></td>
 <td>Histogram</td>
 <td><code>algorithm</code></td>
@@ -1833,6 +1863,20 @@ or <code>none</code>. Classifier <code>reason</code> is <code>timeout</code>, <c
 <p>Logical calls, candidate calls, and HTTP attempts are different counts. Candidate
 fallbacks and HTTP retries remain within one logical call. A response produced
 during routing is not counted again as a new terminal model call.</p>
+<p>The five request/error/latency instruments above record each answer candidate after
+routing, not each HTTP attempt. A failed candidate followed by a successful fallback
+adds two to <code>total_requests</code>, one to <code>total_errors</code>, one to <code>errors</code> for the failed
+model, and one to <code>requests</code> for the successful model. Routing-time calls and failures
+before a routing outcome do not contribute. A response reused from routing contributes
+one to <code>total_requests</code> and one to either <code>requests</code> or <code>errors</code> (also <code>total_errors</code>
+on failure), but no <code>model_call_latency_ms</code> sample. The <code>model</code> label is the
+candidate's configured model ID (the serving model for a reused response), not the
+<code>selected_model</code> label used by logical-call metrics. The two total gauges are cumulative
+process-wide compatibility values, not counts of requests currently in flight.</p>
+<p>For streams, these five instruments record when the response stream ends or is dropped.
+Stream errors count as failures. Dropping an unfinished stream also counts as a failure;
+a terminal message permits a successful drop. Failed calls have no
+<code>model_call_latency_ms</code> sample.</p>
 <h3 id="algorithm-specific-metrics">Algorithm-specific metrics<a class="headerlink" href="#algorithm-specific-metrics" title="Permanent link">&para;</a></h3>
 <p>Stage Router instruments use the prefix <code>switchyard.stage_router.</code>:</p>
 <table>
@@ -1948,10 +1992,10 @@ configured names and fixed categories, not request/session IDs or user text.</p>
 <p>These are current implementation names, not a separately versioned telemetry schema.
 Debug spans and log events are not a stable field contract.</p>
 <ul>
-<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/62494ea70d752e81e7b145bdaff36b3e35dfce5a/crates/libsy/src/observability.rs">Libsy spans, outcome projection, and metrics</a></li>
-<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/62494ea70d752e81e7b145bdaff36b3e35dfce5a/crates/libsy-llm-client/src/run.rs">Client span fields</a> and <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/62494ea70d752e81e7b145bdaff36b3e35dfce5a/crates/libsy-llm-client/src/observability.rs">stream/usage observation</a></li>
-<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/62494ea70d752e81e7b145bdaff36b3e35dfce5a/crates/libsy-llm-client/src/metrics.rs">Client metrics</a></li>
-<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/62494ea70d752e81e7b145bdaff36b3e35dfce5a/crates/libsy/src/algorithms/util/stage.rs">Stage Router metrics</a> and <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/62494ea70d752e81e7b145bdaff36b3e35dfce5a/crates/libsy/src/algorithms/advisor_gate/telemetry.rs">Advisor Gate metrics</a></li>
+<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/1dfbf3475961aa7de65d6e0410c4ff52013e2a4c/crates/libsy/src/observability.rs">Libsy spans, outcome projection, and metrics</a></li>
+<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/1dfbf3475961aa7de65d6e0410c4ff52013e2a4c/crates/libsy-llm-client/src/run.rs">Client span fields</a> and <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/1dfbf3475961aa7de65d6e0410c4ff52013e2a4c/crates/libsy-llm-client/src/observability.rs">stream/usage observation</a></li>
+<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/1dfbf3475961aa7de65d6e0410c4ff52013e2a4c/crates/libsy-llm-client/src/metrics.rs">Client metrics</a></li>
+<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/1dfbf3475961aa7de65d6e0410c4ff52013e2a4c/crates/libsy/src/algorithms/util/stage.rs">Stage Router metrics</a> and <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/1dfbf3475961aa7de65d6e0410c4ff52013e2a4c/crates/libsy/src/algorithms/advisor_gate/telemetry.rs">Advisor Gate metrics</a></li>
 </ul>
 
 
