@@ -1390,12 +1390,11 @@ route's configuration to change as more pairings are added.</p>
 </span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="n">plan</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;create_research_plan&quot;</span><span class="p">]</span>
 </span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="n">new</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;send_message&quot;</span><span class="p">]</span>
 </span></code></pre></div>
-<p><code>[routes.switchyard.classifier]</code> takes the <code>stage_router</code> classifier fields.
+<p><code>[routes.switchyard.classifier]</code> is required and takes the <code>stage_router</code> classifier fields.
 <code>classify_trigger</code> sets how often the judge runs: <code>user_turn</code> re-picks the tier
 whenever the user speaks, <code>new_session</code> picks once and holds it.
-<code>[routes.switchyard.stage]</code> takes the <code>stage_router</code> fields except <code>picker</code>, whose
-job the classifier does per turn. Leave <code>classifier</code> out as well: that judge runs
-ahead of the fall-open tier, so it answers most of the turns this one decided.
+<code>[routes.switchyard.stage]</code> takes the stage settings, but accepts neither <code>picker</code>
+nor a second <code>classifier</code>. The outer classifier supplies the default tier.
 Custom <code>tool_semantics</code> remain stage-local and have the same additive behavior as
 on a standalone stage route.</p>
 <h2 id="sessions">Sessions<a class="headerlink" href="#sessions" title="Permanent link">&para;</a></h2>
