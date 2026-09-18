@@ -141,27 +141,46 @@ fn decode_openai_chat_stream(
                 for tool_call in tool_calls {
                     if let Some(tool_call) = tool_call.as_object() {
                         let function = tool_call.get("function").and_then(Value::as_object);
+                        let index =
+                            tool_call.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
+                        if let Some(name) = function
+                            .and_then(|function| function.get("name"))
+                            .and_then(Value::as_str)
+                            .filter(|name| !name.is_empty())
+                        {
+                            state
+                                .pending_chat_tool_names
+                                .entry(index)
+                                .or_default()
+                                .push_str(name);
+                        }
+                        let arguments_delta = function
+                            .and_then(|function| function.get("arguments"))
+                            .and_then(Value::as_str)
+                            .map(ToOwned::to_owned);
                         out.push(LlmResponseChunk::ToolCallDelta {
-                            index: tool_call.get("index").and_then(Value::as_u64).unwrap_or(0)
-                                as usize,
+                            index,
                             id: tool_call
                                 .get("id")
                                 .and_then(Value::as_str)
                                 .map(ToOwned::to_owned),
-                            name: function
-                                .and_then(|function| function.get("name"))
-                                .and_then(Value::as_str)
-                                .map(ToOwned::to_owned),
-                            arguments_delta: function
-                                .and_then(|function| function.get("arguments"))
-                                .and_then(Value::as_str)
-                                .map(ToOwned::to_owned),
+                            // Names may continue after arguments begin; emit them at finish_reason.
+                            name: None,
+                            arguments_delta,
                         });
                     }
                 }
             }
         }
         if let Some(reason) = choice.get("finish_reason").and_then(Value::as_str) {
+            for (index, name) in std::mem::take(&mut state.pending_chat_tool_names) {
+                out.push(LlmResponseChunk::ToolCallDelta {
+                    index,
+                    id: None,
+                    name: Some(name),
+                    arguments_delta: None,
+                });
+            }
             out.push(LlmResponseChunk::MessageStop {
                 reason: Some(reason.to_string()),
             });
@@ -243,11 +262,16 @@ fn encode_openai_chat_stream(
             name,
             arguments_delta,
         } => {
+            let tool = state.tool_states.entry(index).or_default();
+            // Repeated full names would be concatenated by Chat clients as new fragments.
+            let name = name.filter(|name| tool.name.as_ref() != Some(name));
+            if name.is_some() {
+                tool.name = name.clone();
+            }
             // The source index counts every content block (Anthropic) or output item
             // (Responses), so text ahead of the first tool call shifts it. Chat clients use
             // the index as a subscript into `tool_calls`, so number calls in that array
             // instead, in order of first appearance.
-            let tool = state.tool_states.entry(index).or_default();
             let chat_index = match tool.chat_tool_index {
                 Some(chat_index) => chat_index,
                 None => {
