@@ -1642,7 +1642,7 @@ for reasoning models. Other model/provider pairs may work with reasoning enabled
 or use a different control. Verify the judge response shape before deployment.
 If reasoning remains enabled, set <code>max_output_tokens</code> high enough for both the
 reasoning and final JSON. A truncated verdict has the same fail-open result. See
-the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/cba48a693dc7d13a64e157ee9d5849054d314df5/crates/switchyard-server/CONFIGURATION.md#add-an-llm-client-and-target">target-level <code>extra_body</code> reference</a>
+the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/06c0325d5692f61225ada8d6c408e690788e543a/crates/switchyard-server/CONFIGURATION.md#add-an-llm-client-and-target">target-level <code>extra_body</code> reference</a>
 for the server merge behavior.</p>
 <h2 id="tuning-options">Tuning options<a class="headerlink" href="#tuning-options" title="Permanent link">&para;</a></h2>
 <table>
@@ -1702,7 +1702,8 @@ for the server merge behavior.</p>
 </tbody>
 </table>
 <h3 id="control-images-shown-to-the-judge">Control images shown to the judge<a class="headerlink" href="#control-images-shown-to-the-judge" title="Permanent link">&para;</a></h3>
-<p>Capability and custom classifiers can judge text alone or text with images:</p>
+<p>Capability and custom classifiers already pass images from selected messages to
+the judge. <code>judge_max_images</code> controls how many of those images the judge receives:</p>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">judge_max_images</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="w">  </span><span class="c1"># Text-only judge; the answer model still receives all images.</span>
 </span></code></pre></div>
 <p>Set <code>judge_max_images = 1</code> to show the judge the newest image, or omit the field
@@ -1715,7 +1716,7 @@ Switchyard does not fetch or resize images for this limit.</p>
 optional message-hash affinity key uses only text, so identical questions about
 different images must not share that key. Escalation mode uses a text summary
 and rejects <code>judge_max_images</code>.</p>
-<p>The <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/cba48a693dc7d13a64e157ee9d5849054d314df5/examples/vision_judge/README.md">Cosmos vision judge example</a> includes
+<p>The <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/06c0325d5692f61225ada8d6c408e690788e543a/examples/vision_judge/README.md">Cosmos vision judge example</a> includes
 both modes, a pinned VANTAGE still image, Cosmos/Astra answer targets, and a live
 runner that verifies the images sent to each model.</p>
 <h3 id="override-the-classifier-prompt">Override the classifier prompt<a class="headerlink" href="#override-the-classifier-prompt" title="Permanent link">&para;</a></h3>
