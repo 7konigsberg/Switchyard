@@ -252,7 +252,7 @@ fn request_media_survives_reencoding_or_is_rejected() -> TestResult {
 }
 
 #[test]
-fn abuse_identity_survives_request_translation() -> TestResult {
+fn native_abuse_identity_is_preserved_but_not_mapped() -> TestResult {
     let engine = TranslationEngine::default();
     let formats = [
         WireFormat::OpenAiChat,
@@ -261,7 +261,12 @@ fn abuse_identity_survives_request_translation() -> TestResult {
     ];
     for policy in [TranslationPolicy::default(), normalized_policy()] {
         for source in formats {
-            for identity in [Some("opaque-user-6cc3d8d5"), None] {
+            let long_identity = "u".repeat(150);
+            for identity in [
+                Some("opaque-user-6cc3d8d5"),
+                Some(long_identity.as_str()),
+                None,
+            ] {
                 let mut body = match source {
                     WireFormat::OpenAiChat => json!({
                         "messages": [{"role": "user", "content": "hi"}]
@@ -287,11 +292,20 @@ fn abuse_identity_survives_request_translation() -> TestResult {
                 for target in formats {
                     let output = engine.encode_request(target, &request, &policy)?.body;
                     let actual = if target == WireFormat::AnthropicMessages {
-                        &output["metadata"]["user_id"]
+                        output
+                            .get("metadata")
+                            .and_then(|metadata| metadata.get("user_id"))
                     } else {
-                        &output["safety_identifier"]
+                        output.get("safety_identifier")
                     };
-                    assert_eq!(actual, &json!(identity), "{source:?} -> {target:?}");
+                    let crosses_anthropic = (source == WireFormat::AnthropicMessages)
+                        != (target == WireFormat::AnthropicMessages);
+                    let expected = if crosses_anthropic { None } else { identity };
+                    assert_eq!(
+                        actual,
+                        expected.map(|value| json!(value)).as_ref(),
+                        "{source:?} -> {target:?}"
+                    );
                     if source != WireFormat::AnthropicMessages
                         && target != WireFormat::AnthropicMessages
                     {
