@@ -1833,6 +1833,12 @@ regard to ASCII case:</p>
 across categories, and unknown category keys are rejected when the route is
 loaded. Argument-aware wrapper tools, inferred semantics, and learned routing
 rules are outside this exact-name configuration.</p>
+<p>MCP tools match by their bare tool name or by their full name. Claude Code sends
+an MCP tool as <code>mcp__&lt;server&gt;__&lt;tool&gt;</code>, and Codex sends it with a separate
+<code>namespace</code>. For both, <code>send_payment_request</code> matches the <code>send_payment_request</code>
+tool on the <code>billing</code> MCP server, and so does
+<code>mcp__billing__send_payment_request</code>. A server name that contains <code>__</code> needs the
+full name.</p>
 <h3 id="optional-handoff-notes">Optional: handoff notes<a class="headerlink" href="#optional-handoff-notes" title="Permanent link">&para;</a></h3>
 <p>Add a <code>[routes.stage.handoff_notes]</code> section to append contextual guidance to a
 request when tool signals decide its tier. Notes exist only in the forwarded
