@@ -742,6 +742,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../routing_algorithms/plan_execute_routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plan/Execute Routing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../routing_algorithms/subagent_routing/" class="md-nav__link">
         
   
@@ -1226,6 +1254,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#plan_execute" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        plan_execute
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#prefill_router" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1490,6 +1529,17 @@
     <span class="md-ellipsis">
       
         random
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plan_execute" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        plan_execute
       
     </span>
   </a>
@@ -1905,6 +1955,51 @@ see <a href="../../routing_algorithms/subagent_routing/">Sub-Agent-Aware Routing
 <td style="text-align: center;">No</td>
 <td>unset</td>
 <td>Reproduces the selection sequence.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="plan_execute"><code>plan_execute</code><a class="headerlink" href="#plan_execute" title="Permanent link">&para;</a></h3>
+<p>Plans on a capable target, then switches to an efficient target after the first
+file mutation. See <a href="../../routing_algorithms/plan_execute_routing/">Plan/Execute Routing</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th style="text-align: center;">Required</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>capable_target</code></td>
+<td style="text-align: center;">Yes</td>
+<td>-</td>
+<td>Target used for read-only inspection and planning.</td>
+</tr>
+<tr>
+<td><code>efficient_target</code></td>
+<td style="text-align: center;">Yes</td>
+<td>-</td>
+<td>Target used after the first edit or write.</td>
+</tr>
+<tr>
+<td><code>planning_prompt</code></td>
+<td style="text-align: center;">No</td>
+<td>packaged prompt</td>
+<td>Replaces the planning instruction.</td>
+</tr>
+<tr>
+<td><code>handoff_prompt</code></td>
+<td style="text-align: center;">No</td>
+<td>unset</td>
+<td>Adds an instruction to the handoff request.</td>
+</tr>
+<tr>
+<td><code>planner_reasoning_as_text</code></td>
+<td style="text-align: center;">No</td>
+<td><code>false</code></td>
+<td>Converts visible planner reasoning summaries to assistant text at handoff.</td>
 </tr>
 </tbody>
 </table>

@@ -14,7 +14,7 @@
         <link rel="prev" href="../llm_classifier_routing/">
       
       
-        <link rel="next" href="../subagent_routing/">
+        <link rel="next" href="../plan_execute_routing/">
       
       
         
@@ -812,6 +812,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#what-05-means-with-efficient_first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What 0.5 means with efficient_first
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#calibrating-the-threshold-from-run-data" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -931,6 +942,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plan_execute_routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plan/Execute Routing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1432,6 +1471,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#what-05-means-with-efficient_first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What 0.5 means with efficient_first
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#calibrating-the-threshold-from-run-data" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1641,28 +1691,30 @@ warning at startup when a route selects it. Use <code>efficient_first</code> unl
 are running your own calibration.</p>
 </div>
 <h2 id="tuning-confidence_threshold">Tuning <code>confidence_threshold</code><a class="headerlink" href="#tuning-confidence_threshold" title="Permanent link">&para;</a></h2>
-<p>The scorer rates each turn from <code>0</code> (signals are neutral) to <code>1</code> (signals point
-hard at one tier). <code>confidence_threshold</code> is the bar that rating has to clear
-before the router will switch off the picker's default tier. Clear it and the
-router routes to the tier the signals indicate; fall short and the turn stays on
-the default.</p>
+<p>The tool-signal scorer gives each turn a signed score in <code>(-1, 1)</code>: negative
+scores point to the efficient tier, positive scores point to the capable tier,
+and the absolute value is the confidence. <code>confidence_threshold</code> creates a
+closed <strong>ambiguous band</strong> from <code>-threshold</code> to <code>+threshold</code>. Scores outside the
+band make a signal-based decision; scores inside it go to the optional
+classifier or fall back to the picker's default tier.</p>
 <p>The TOML schema requires you to choose <code>picker</code> explicitly; there is no implicit
-default. With the <code>capable_first</code> picker, every turn starts on the capable tier
-and only drops to the efficient tier when the signals say "efficient" and clear
-the threshold. So the threshold sets how much evidence it takes to switch to the
-cheaper tier:</p>
-<ul>
-<li>Raise it and only strong, decisive signals drop a turn to efficient, so the
-  router stays on capable longer (more quality, more cost).</li>
-<li>Lower it and weaker signals are enough to drop to efficient, so more turns go
-  cheap (more savings, more risk).</li>
-</ul>
-<p><code>efficient_first</code> is the mirror: turns start on efficient and need a signal that
-clears the threshold to escalate to capable.</p>
-<p>(If you add the optional classifier, sub-threshold turns go to it instead of
-staying on the default tier.)</p>
+default.</p>
 <p><strong>Set <code>0.5</code> explicitly.</strong> <code>confidence_threshold</code> is required by the TOML schema;
-<code>0.5</code> is the recommended starting point and what the example below uses.</p>
+<code>0.5</code> is the recommended starting point, derived from many coding benchmarks,
+and what the example below uses.</p>
+<h3 id="what-05-means-with-efficient_first">What <code>0.5</code> means with <code>efficient_first</code><a class="headerlink" href="#what-05-means-with-efficient_first" title="Permanent link">&para;</a></h3>
+<p><img alt="Illustrative Stage score distribution with an ambiguous band from -0.5 to 0.5. Scores below -0.5 route efficient, scores in the band fall back to efficient, and scores above 0.5 route capable." src="../../assets/stage-router-threshold.svg" /></p>
+<p>With <code>picker = "efficient_first"</code>, no classifier, and a threshold of <code>0.5</code>:</p>
+<ul>
+<li>scores below <code>-0.5</code> route to efficient from the tool signals;</li>
+<li>scores from <code>-0.5</code> through <code>+0.5</code> are ambiguous and fall back to efficient;</li>
+<li>scores above <code>+0.5</code> route to capable from the tool signals.</li>
+</ul>
+<p>Hard overrides and capable-hold state can still select capable independently of
+this score. Lowering the threshold narrows the ambiguous band, so more turns are
+decided directly by the scorer. Raising it widens the band, so more turns use the
+picker default (or the classifier, when configured). That movement changes the
+efficient/capable routing split.</p>
 <table>
 <thead>
 <tr>
@@ -1680,7 +1732,7 @@ staying on the default tier.)</p>
 <tr>
 <td><code>0.5</code></td>
 <td>no</td>
-<td>Recommended starting point. The scorer is corroborative — one full wrong signal scores ~<code>0.46</code>, just under <code>0.5</code> — so a decisive escalation takes a strong signal plus corroboration, while a critical error overrides regardless. Derived from SWE-Bench Pro Python-75 calibration.</td>
+<td>Recommended starting point, derived from many coding benchmarks. Signals outside the ambiguous band decide the tier; the rest use the picker default.</td>
 </tr>
 <tr>
 <td><code>0.7</code> - <code>0.9</code></td>
@@ -1701,92 +1753,14 @@ overrides and capable-hold behavior still apply.</p>
 production: <code>/v1/stats</code> reports stage-router decisions by source and semantic
 target, while response headers and structured decision logs explain individual selections.</p>
 <h3 id="calibrating-the-threshold-from-run-data">Calibrating the threshold from run data<a class="headerlink" href="#calibrating-the-threshold-from-run-data" title="Permanent link">&para;</a></h3>
-<p>The recommended <code>0.5</code> starting point was derived from SWE-Bench Pro Python-75
-calibration. To tune for a different task set or model pair, follow this
-minimum-data path.</p>
-<p><strong>What you need</strong></p>
-<table>
-<thead>
-<tr>
-<th>Run</th>
-<th>Coverage</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Pure-capable</td>
-<td>~40–75 representative tasks</td>
-<td>Baseline outcomes + signal features</td>
-</tr>
-<tr>
-<td>Pure-efficient</td>
-<td>~20 tasks (sampled from capable results)</td>
-<td>Counterfactual outcomes</td>
-</tr>
-</tbody>
-</table>
-<p>Neither run needs to cover the full task set. A few dozen capable tasks gives
-enough outcome diversity; the efficient probe only needs to cover the interesting
-quadrant candidates identified from those capable results.</p>
-<p><strong>How to sample the efficient probe set</strong></p>
-<p>Stratify the pure-capable results across four quadrant candidates before running efficient:</p>
-<table>
-<thead>
-<tr>
-<th>Category</th>
-<th>Criterion</th>
-<th>Count</th>
-<th>Value</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Easy + clean</td>
-<td>Capable passes, small diff, clear spec</td>
-<td>~5</td>
-<td>Establishes SAFE floor</td>
-</tr>
-<tr>
-<td>Easy + tricky</td>
-<td>Capable passes, subtle logic</td>
-<td>~5</td>
-<td>Finds RESCUE candidates</td>
-</tr>
-<tr>
-<td>Hard + structural</td>
-<td>Capable fails, large multi-file diff</td>
-<td>~5</td>
-<td>HARD noise baseline</td>
-</tr>
-<tr>
-<td>Hard + localized</td>
-<td>Capable fails, small targeted fix</td>
-<td>~5</td>
-<td>Finds LOSS candidates</td>
-</tr>
-</tbody>
-</table>
-<p>Sample across repos and diff sizes. Don't over-represent one project.</p>
-<p><strong>Building RESCUE / LOSS quadrants</strong></p>
-<p>For efficient-to-capable escalation, group the overlap tasks (those with both
-capable and efficient results):</p>
-<ul>
-<li><code>RESCUE</code> = efficient-fail ∩ capable-pass, a candidate for beneficial escalation</li>
-<li><code>LOSS</code>   = efficient-pass ∩ capable-fail, a candidate for harmful escalation</li>
-<li><code>SAFE</code>   = both pass</li>
-<li><code>HARD</code>   = both fail</li>
-</ul>
-<p>Sweep a few candidate thresholds in routed benchmark runs. For
-<code>efficient_first</code>, choose the lowest threshold that improves outcomes on RESCUE
-tasks without turning passing LOSS tasks into failures. Because the scorer is
-corroborative, a <code>0.5</code> threshold takes
-roughly 1.5 signals of agreement.</p>
-<p><strong>Caveat on fixed-model outcomes vs. routed outcomes</strong></p>
-<p>After a switch, the selected model inherits conversation history from the other
-model. Fixed-model runs do not measure this effect. Inherited context may help
-or hurt, so these quadrants identify candidates, not guaranteed outcomes.
-Validate the threshold with routed runs on the same tasks.</p>
+<p>Use about 10% of your representative tasks. Replay their agent histories through
+the Stage tool-signal scorer and collect the raw signed score for every turn.
+Plot that distribution, then overlay candidate ambiguous bands.</p>
+<p>For <code>efficient_first</code>, count how many turns fall below the band, inside it, and
+above it. Those three regions map directly to signal-selected efficient,
+ambiguous/default-efficient, and signal-selected capable decisions when no
+classifier is configured. Choose the threshold that gives the routing split you
+want, then validate it on the same sample before running the full task set.</p>
 <h2 id="route-configuration">Route configuration<a class="headerlink" href="#route-configuration" title="Permanent link">&para;</a></h2>
 <blockquote>
 <p>Requires unreleased features. <a href="../../getting_started/#build-from-source">Build from source</a> to run this example.</p>
