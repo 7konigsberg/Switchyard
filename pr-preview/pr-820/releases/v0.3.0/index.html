@@ -1565,9 +1565,6 @@
 
 
 <h1 id="switchyard-v030-release-notes">Switchyard v0.3.0 Release Notes<a class="headerlink" href="#switchyard-v030-release-notes" title="Permanent link">&para;</a></h1>
-<p><strong>Draft — September 22, 2026.</strong> These notes compare the remote <code>v0.2.0</code> tag
-(<code>1fc9ab88</code>) with <code>main</code> at <code>107f7985</code>. They describe changes in source, not
-final QA sign-off or confirmation that release packages are published.</p>
 <p>Switchyard 0.3.0 focuses on integrating routing into gateways and agent
 harnesses. It builds on the Rust server and library introduced in 0.2.0, adds
 new ways to combine routing policies, and addresses protocol and tool-loop
@@ -1584,14 +1581,14 @@ failures found during release testing.</p>
   from a file or TOML text. Rust and Python hosts can instead drive libsy's
   routing steps while retaining control of model calls, credentials, and
   retries. Successful outcomes include ordered model candidates and optional
-  decision evidence. See the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/6e677600938acb60603d496051a08d524b4afad1/crates/libsy/README.md">library guide</a>.</li>
+  decision evidence. See the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/23cf384dcf8fe7a672d3085034a6018ab53d359b/crates/libsy/README.md">library guide</a>.</li>
 <li><strong>Decision-only and hosted-server options.</strong> The standalone server adds
   <code>/v1/decision</code>, optional forwarding for unmatched requests, and a Dockerfile.
   Rust hosts can mount only its inference endpoints and own authentication,
   model discovery, and operational endpoints separately.</li>
 <li><strong>LiteLLM routing plugin.</strong> The experimental example now runs at LiteLLM's
   routing-plugin boundary, with Stage and Random configurations. LiteLLM owns
-  provider calls and retries. See the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/6e677600938acb60603d496051a08d524b4afad1/examples/litellm/README.md">example</a>.</li>
+  provider calls and retries. See the <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/23cf384dcf8fe7a672d3085034a6018ab53d359b/examples/litellm/README.md">example</a>.</li>
 </ul>
 <h3 id="choose-routing-behavior-for-the-workload">Choose routing behavior for the workload<a class="headerlink" href="#choose-routing-behavior-for-the-workload" title="Permanent link">&para;</a></h3>
 <ul>
@@ -1649,14 +1646,14 @@ exporters, filtering, and retention. See the
 <a href="../../reference/opentelemetry/">OpenTelemetry reference</a> and
 <a href="../../reference/toml_schema/#llm_clientsname">client timeout contract</a>.</p>
 <h3 id="reproduce-evaluations-with-explicit-settings">Reproduce evaluations with explicit settings<a class="headerlink" href="#reproduce-evaluations-with-explicit-settings" title="Permanent link">&para;</a></h3>
-<p>The release adds a <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/6e677600938acb60603d496051a08d524b4afad1/benchmark/README.md#deepswe-v11">DeepSWE v1.1 Harbor/Pier workflow</a>,
+<p>The release adds a <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/23cf384dcf8fe7a672d3085034a6018ab53d359b/benchmark/README.md#deepswe-v11">DeepSWE v1.1 Harbor/Pier workflow</a>,
 Stage Router and Advisor Gate profiles, and
-<a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/6e677600938acb60603d496051a08d524b4afad1/benchmark/DEEPSWE_V11_QUALIFICATION.md">qualification settings</a>.
+<a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/23cf384dcf8fe7a672d3085034a6018ab53d359b/benchmark/DEEPSWE_V11_QUALIFICATION.md">qualification settings</a>.
 The qualification document records the 113-task denominator, Codex and Harbor
 versions, budgets, retries, scoring, pricing snapshot, and run revisions.
 Public profiles use a different provider from the qualification runs, so
 absolute results can differ.</p>
-<p>A <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/6e677600938acb60603d496051a08d524b4afad1/benchmark/nemo_gym/README.md">NeMo Gym tutorial</a> compares fixed-model
+<p>A <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/23cf384dcf8fe7a672d3085034a6018ab53d359b/benchmark/nemo_gym/README.md">NeMo Gym tutorial</a> compares fixed-model
 and routed execution through LiteLLM. Release-soak and routing-overhead tools
 support operational checks. These workflows do not establish a general cost
 or accuracy improvement across workloads.</p>
@@ -1703,8 +1700,7 @@ version tested by your integration.</p>
 </table>
 <p>Start with <a href="../../getting_started/">Getting Started</a>, the
 <a href="../../reference/toml_schema/">TOML schema</a>, and the
-<a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/6e677600938acb60603d496051a08d524b4afad1/examples/libsy.py">runnable embedding example</a>. Until release artifacts
-are published, build from a pinned source revision; the 0.2.0 packages do not
+<a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/23cf384dcf8fe7a672d3085034a6018ab53d359b/examples/libsy.py">runnable embedding example</a>. The 0.2.0 packages do not
 provide the new API. Relay plugin bundles are distributed separately and must
 be checked against their source-commit and host-compatibility metadata.</p>
 <h2 id="maturity-and-limitations">Maturity and limitations<a class="headerlink" href="#maturity-and-limitations" title="Permanent link">&para;</a></h2>
@@ -1726,15 +1722,15 @@ be checked against their source-commit and host-compatibility metadata.</p>
 <li><strong>Experimental work:</strong> Prefill Router requires user-supplied compatible
   checkpoints and encoder assets; no supported exporter or checkpoint is
   provided. The LiteLLM example is experimental. The separate
-  <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/6e677600938acb60603d496051a08d524b4afad1/experimental/craft-taskgen/README.md">CRAFT task-generation tooling</a>
+  <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/23cf384dcf8fe7a672d3085034a6018ab53d359b/experimental/craft-taskgen/README.md">CRAFT task-generation tooling</a>
   is also experimental, not a production routing feature.</li>
 </ul>
 <h2 id="further-reading">Further reading<a class="headerlink" href="#further-reading" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/6e677600938acb60603d496051a08d524b4afad1/CHANGELOG.md">Detailed changelog</a></li>
+<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/23cf384dcf8fe7a672d3085034a6018ab53d359b/CHANGELOG.md">Detailed changelog</a></li>
 <li><a href="https://github.com/NVIDIA-NeMo/Switchyard/compare/v0.2.0...107f79853395b89eea26620cad7ca63a80b13ea0">Source comparison from v0.2.0</a></li>
-<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/6e677600938acb60603d496051a08d524b4afad1/crates/switchyard-server/README.md">Server configuration and endpoints</a></li>
-<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/6e677600938acb60603d496051a08d524b4afad1/crates/switchyard-nemo-relay-plugin/README.md">NeMo Relay installation</a></li>
+<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/23cf384dcf8fe7a672d3085034a6018ab53d359b/crates/switchyard-server/README.md">Server configuration and endpoints</a></li>
+<li><a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/23cf384dcf8fe7a672d3085034a6018ab53d359b/crates/switchyard-nemo-relay-plugin/README.md">NeMo Relay installation</a></li>
 </ul>
 
 
