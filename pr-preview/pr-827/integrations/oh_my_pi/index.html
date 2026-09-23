@@ -1527,26 +1527,23 @@ and compaction.</p>
 <code>OPENAI_BASE_URL</code> does not move its built-in <code>openai</code> provider. The <code>models.yml</code> entry
 is the way to point it at a proxy.</p>
 <h2 id="before-you-start">Before you start<a class="headerlink" href="#before-you-start" title="Permanent link">&para;</a></h2>
-<p>Start <code>switchyard-server</code> with a config that declares at least one route.
-<a href="../../getting_started/#server-path">Getting Started</a> ends with a server on
-<code>http://localhost:4000</code> and a route with <code>id = "switchyard"</code>. The examples below use
-that route id. Check the server before you configure <code>omp</code>:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>http://localhost:4000/v1/models
-</span></code></pre></div>
+<p>Start <code>switchyard-server</code> as shown in <a href="../../getting_started/#server-path">Getting Started</a>.
+The examples below use its server address <code>http://localhost:4000</code> and its route id
+<code>switchyard</code>.</p>
 <h2 id="add-switchyard-to-oh-my-pi">Add Switchyard to Oh My Pi<a class="headerlink" href="#add-switchyard-to-oh-my-pi" title="Permanent link">&para;</a></h2>
 <p>Create or edit <code>~/.omp/agent/models.yml</code>:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">providers</span><span class="p">:</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">switchyard</span><span class="p">:</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">baseUrl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:4000/v1</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="nt">api</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openai-completions</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="nt">auth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">none</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="nt">models</span><span class="p">:</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">switchyard</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Switchyard stage router</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">        </span><span class="nt">reasoning</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">        </span><span class="nt">input</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">text</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">image</span><span class="p p-Indicator">]</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">        </span><span class="nt">contextWindow</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200000</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">        </span><span class="nt">maxTokens</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32000</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">providers</span><span class="p">:</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">switchyard</span><span class="p">:</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">baseUrl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:4000/v1</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">api</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openai-completions</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="nt">auth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">none</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="nt">models</span><span class="p">:</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">switchyard</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Switchyard stage router</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">        </span><span class="nt">reasoning</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">        </span><span class="nt">input</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">text</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">image</span><span class="p p-Indicator">]</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">        </span><span class="nt">contextWindow</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200000</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">        </span><span class="nt">maxTokens</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32000</span>
 </span></code></pre></div>
 <p>What each field does:</p>
 <ul>
@@ -1564,49 +1561,44 @@ that route id. Check the server before you configure <code>omp</code>:</p>
   <code>reasoning_effort</code>. Set it to <code>false</code> when no target accepts reasoning controls.</li>
 </ul>
 <p>Check that <code>omp</code> loaded the file:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>omp<span class="w"> </span>models<span class="w"> </span>find<span class="w"> </span>switchyard
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>omp<span class="w"> </span>models<span class="w"> </span>find<span class="w"> </span>switchyard
 </span></code></pre></div>
 <h3 id="let-omp-list-the-routes-for-you">Let omp list the routes for you<a class="headerlink" href="#let-omp-list-the-routes-for-you" title="Permanent link">&para;</a></h3>
 <p>Instead of listing models, <code>omp</code> can read them from <code>GET /v1/models</code>:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">providers</span><span class="p">:</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">switchyard</span><span class="p">:</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">baseUrl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:4000/v1</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="nt">api</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openai-completions</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span><span class="nt">auth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">none</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="nt">discovery</span><span class="p">:</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openai-models-list</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">providers</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">switchyard</span><span class="p">:</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">baseUrl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:4000/v1</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nt">api</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openai-completions</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="nt">auth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">none</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="nt">discovery</span><span class="p">:</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openai-models-list</span>
 </span></code></pre></div>
-<p><code>omp</code> then adds one model per route. Each entry uses the route's declared
-<code>context_window</code> when the TOML sets one; Switchyard reports it as <code>context_length</code> on
-<code>GET /v1/models</code>. Routes without a declared window get <code>omp</code>'s default of 128K tokens.
-Discovered models have no thinking controls and accept text only. List the models by
-hand when you need <code>--thinking</code> or image input. <code>omp</code> caches the list for a day; run
-<code>omp models refresh</code> after you change the routes.</p>
+<p><code>omp</code> then adds one model per route and sizes each one from the <code>context_length</code> the
+server reports for routes that declare <code>context_window</code>. Routes without a declared
+window get <code>omp</code>'s default of 128K tokens. Discovered models have no thinking controls
+and accept text only. List the models by hand when you need <code>--thinking</code> or image input.
+<code>omp</code> caches the list for a day; run <code>omp models refresh</code> after you change the routes.</p>
 <h2 id="run-oh-my-pi">Run Oh My Pi<a class="headerlink" href="#run-oh-my-pi" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>omp<span class="w"> </span>--model<span class="w"> </span>switchyard/switchyard
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>omp<span class="w"> </span>--model<span class="w"> </span>switchyard/switchyard
 </span></code></pre></div>
 <p>For a one-shot run:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>omp<span class="w"> </span>-p<span class="w"> </span>--model<span class="w"> </span>switchyard/switchyard<span class="w"> </span><span class="s2">&quot;List the files in this directory.&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>omp<span class="w"> </span>-p<span class="w"> </span>--model<span class="w"> </span>switchyard/switchyard<span class="w"> </span><span class="s2">&quot;List the files in this directory.&quot;</span>
 </span></code></pre></div>
 <p><code>--thinking low</code> (or <code>off</code>, <code>minimal</code>, <code>medium</code>, <code>high</code>, <code>xhigh</code>) sets the reasoning
 level <code>omp</code> sends. Switchyard forwards it to the selected target. To make the route the
 default model, set <code>modelRoles.default: switchyard/switchyard</code> in
 <code>~/.omp/agent/config.yml</code>.</p>
 <h2 id="check-the-routing">Check the routing<a class="headerlink" href="#check-the-routing" title="Permanent link">&para;</a></h2>
-<p><code>GET /v1/stats</code> lists each target model with its call count and token totals:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>http://localhost:4000/v1/stats<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.models | map_values({calls, prompt_tokens})&#39;</span>
+<p>The checks in <a href="../pi/#check-the-routing">Use Switchyard with pi</a> (<code>GET /v1/stats</code>, the
+<code>x-model-router-selected-model</code> response header, <code>--routing-log-file</code>) work the same way
+for <code>omp</code>. One difference: on the Chat Completions API <code>omp</code> sends no session header for
+a custom provider, so the routing log records <code>"session_id": null</code>:</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="nt">&quot;route_id&quot;</span><span class="p">:</span><span class="s2">&quot;switchyard&quot;</span><span class="p">,</span><span class="nt">&quot;algorithm&quot;</span><span class="p">:</span><span class="s2">&quot;stage_router&quot;</span><span class="p">,</span><span class="nt">&quot;model&quot;</span><span class="p">:</span><span class="s2">&quot;azure/anthropic/claude-haiku-4-5&quot;</span><span class="p">,</span><span class="nt">&quot;session_id&quot;</span><span class="p">:</span><span class="kc">null</span><span class="p">,</span><span class="nt">&quot;prompt_tokens&quot;</span><span class="p">:</span><span class="mi">21443</span><span class="p">,</span><span class="nt">&quot;completion_tokens&quot;</span><span class="p">:</span><span class="mi">133</span><span class="p">}</span>
 </span></code></pre></div>
-<p>Every response also carries the header <code>x-model-router-selected-model</code> with the target
-that served it. Start the server with <code>--routing-log-file PATH</code> to get one JSON record
-per call with the route id and served model:</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span><span class="nt">&quot;route_id&quot;</span><span class="p">:</span><span class="s2">&quot;switchyard&quot;</span><span class="p">,</span><span class="nt">&quot;algorithm&quot;</span><span class="p">:</span><span class="s2">&quot;stage_router&quot;</span><span class="p">,</span><span class="nt">&quot;model&quot;</span><span class="p">:</span><span class="s2">&quot;azure/anthropic/claude-haiku-4-5&quot;</span><span class="p">,</span><span class="nt">&quot;session_id&quot;</span><span class="p">:</span><span class="kc">null</span><span class="p">,</span><span class="nt">&quot;prompt_tokens&quot;</span><span class="p">:</span><span class="mi">21443</span><span class="p">,</span><span class="nt">&quot;completion_tokens&quot;</span><span class="p">:</span><span class="mi">133</span><span class="p">}</span>
-</span></code></pre></div>
-<p><code>session_id</code> is <code>null</code> here because <code>omp</code> sends no session header on the Chat
-Completions API for a custom provider. See the next section.</p>
 <h2 id="choose-the-request-api">Choose the request API<a class="headerlink" href="#choose-the-request-api" title="Permanent link">&para;</a></h2>
-<p>A route answers on all three Switchyard endpoints. When the request API matches the
-format of the route's LLM client, Switchyard forwards the body unchanged apart from
-the model id. When they differ, Switchyard translates the request.</p>
+<p>A route answers on all three Switchyard endpoints;
+<a href="../pi/#choose-the-request-api">Use Switchyard with pi</a> explains when Switchyard forwards
+the body unchanged and when it translates it. The choice differs for <code>omp</code>:</p>
 <table>
 <thead>
 <tr>
@@ -1652,7 +1644,7 @@ its thinking replay or compaction.</p>
 <li><code>omp</code> sends <code>User-Agent: omp/&lt;version&gt;</code> and no install id on these APIs.</li>
 <li>Set <code>cost</code> on the model entry if you want <code>omp</code>'s cost display to be non-zero.
   Switchyard does not report prices.</li>
-<li>Harbor, the benchmark runner behind <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/4b11d454febc66fa3a3973e5795c37ebd4dcef70/benchmark/README.md"><code>benchmark/run-baseline.sh</code></a>,
+<li>Harbor, the benchmark runner behind <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/fe920dcaed5dbb8853c612afbea59d81714556cb/benchmark/README.md"><code>benchmark/run-baseline.sh</code></a>,
   has no Oh My Pi agent, so that script supports pi but not Oh My Pi.</li>
 </ul>
 
