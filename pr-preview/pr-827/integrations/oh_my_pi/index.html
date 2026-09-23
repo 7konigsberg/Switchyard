@@ -1628,9 +1628,10 @@ the body unchanged and when it translates it. The choice differs for <code>omp</
 <p>On the two OpenAI APIs, <code>omp</code> sends a session header only to its built-in <code>openai</code>
 provider. Switchyard then sees no session id from <code>omp</code>, so routes with
 <code>classify_trigger = "user_turn"</code> or <code>"new_session"</code>, advisor budgets, and
-<code>GET /v1/routing/session-stats</code> treat every request on its own. Routes that read the
-conversation itself, such as <code>stage_router</code> and the default <code>llm_classifier</code>, do not
-need a session id.</p>
+<code>GET /v1/routing/session-stats</code> treat every request on its own. <code>stage_router</code> still
+scores each request from the conversation, but its <code>capable_hold_turns</code> state is kept per
+session, so the hold does not carry over between requests. The default <code>llm_classifier</code>
+(<code>classify_trigger = "every_request"</code>) needs no session id.</p>
 <p>For <code>anthropic-messages</code>, set <code>baseUrl: http://localhost:4000</code> and keep <code>auth: none</code>.
 <code>omp</code> sends <code>anthropic-version: 2023-06-01</code> itself. Unlike pi, <code>omp</code> keeps the local
 model id on stored messages, so the served target name in the response does not affect
@@ -1641,11 +1642,7 @@ its thinking replay or compaction.</p>
   <code>litellm</code> provider and for <code>omp auth-gateway</code>. If <code>LITELLM_API_KEY</code> is set, <code>omp</code> also
   probes <code>http://localhost:4000/v1</code> as a LiteLLM proxy. Run Switchyard on another port, or
   set <code>LITELLM_BASE_URL</code>, when that happens.</li>
-<li><code>omp</code> sends <code>User-Agent: omp/&lt;version&gt;</code> and no install id on these APIs.</li>
-<li>Set <code>cost</code> on the model entry if you want <code>omp</code>'s cost display to be non-zero.
-  Switchyard does not report prices.</li>
-<li>Harbor, the benchmark runner behind <a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/fe920dcaed5dbb8853c612afbea59d81714556cb/benchmark/README.md"><code>benchmark/run-baseline.sh</code></a>,
-  has no Oh My Pi agent, so that script supports pi but not Oh My Pi.</li>
+<li>Set <code>cost</code> on the model entry if you want <code>omp</code>'s cost display to be non-zero.</li>
 </ul>
 
 
