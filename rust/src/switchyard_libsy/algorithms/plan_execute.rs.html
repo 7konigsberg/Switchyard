@@ -365,23 +365,39 @@
 <a href=#365 id=365 data-nosnippet>365</a>        <span class="macro">assert!</span>(routed.llm_request.instructions.is_empty());
 <a href=#366 id=366 data-nosnippet>366</a>    }
 <a href=#367 id=367 data-nosnippet>367</a>
-<a href=#368 id=368 data-nosnippet>368</a>    <span class="attr">#[test]
-<a href=#369 id=369 data-nosnippet>369</a>    </span><span class="kw">fn </span>rejects_blank_prompts() {
-<a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">for </span>config <span class="kw">in </span>[
-<a href=#371 id=371 data-nosnippet>371</a>            PlanExecuteConfig {
-<a href=#372 id=372 data-nosnippet>372</a>                planning_prompt: <span class="string">"  "</span>.to_string(),
-<a href=#373 id=373 data-nosnippet>373</a>                ..PlanExecuteConfig::default()
-<a href=#374 id=374 data-nosnippet>374</a>            },
-<a href=#375 id=375 data-nosnippet>375</a>            PlanExecuteConfig {
-<a href=#376 id=376 data-nosnippet>376</a>                handoff_prompt: <span class="prelude-val">Some</span>(<span class="string">"  "</span>.to_string()),
-<a href=#377 id=377 data-nosnippet>377</a>                ..PlanExecuteConfig::default()
-<a href=#378 id=378 data-nosnippet>378</a>            },
-<a href=#379 id=379 data-nosnippet>379</a>        ] {
-<a href=#380 id=380 data-nosnippet>380</a>            <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#381 id=381 data-nosnippet>381</a>                PlanExecute::new(config),
-<a href=#382 id=382 data-nosnippet>382</a>                <span class="prelude-val">Err</span>(LibsyError::AlgorithmError { .. })
-<a href=#383 id=383 data-nosnippet>383</a>            ));
-<a href=#384 id=384 data-nosnippet>384</a>        }
-<a href=#385 id=385 data-nosnippet>385</a>    }
-<a href=#386 id=386 data-nosnippet>386</a>}
+<a href=#368 id=368 data-nosnippet>368</a>    <span class="attr">#[tokio::test]
+<a href=#369 id=369 data-nosnippet>369</a>    </span><span class="kw">async fn </span>editor_view_keeps_planning() {
+<a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">let </span>messages = <span class="macro">vec!</span>[tool_call(
+<a href=#371 id=371 data-nosnippet>371</a>            <span class="string">"str_replace_based_edit_tool"</span>,
+<a href=#372 id=372 data-nosnippet>372</a>            <span class="macro">json!</span>({<span class="string">"command"</span>: <span class="string">"view"</span>, <span class="string">"path"</span>: <span class="string">"/app/main.py"</span>}),
+<a href=#373 id=373 data-nosnippet>373</a>        )];
+<a href=#374 id=374 data-nosnippet>374</a>
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">let </span>(selected, <span class="kw">_</span>) = route_and_capture(
+<a href=#376 id=376 data-nosnippet>376</a>            algorithm(PlanExecuteConfig::default()),
+<a href=#377 id=377 data-nosnippet>377</a>            request(messages, <span class="prelude-val">None</span>),
+<a href=#378 id=378 data-nosnippet>378</a>        )
+<a href=#379 id=379 data-nosnippet>379</a>        .<span class="kw">await</span>;
+<a href=#380 id=380 data-nosnippet>380</a>
+<a href=#381 id=381 data-nosnippet>381</a>        <span class="macro">assert_eq!</span>(selected, CAPABLE);
+<a href=#382 id=382 data-nosnippet>382</a>    }
+<a href=#383 id=383 data-nosnippet>383</a>
+<a href=#384 id=384 data-nosnippet>384</a>    <span class="attr">#[test]
+<a href=#385 id=385 data-nosnippet>385</a>    </span><span class="kw">fn </span>rejects_blank_prompts() {
+<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">for </span>config <span class="kw">in </span>[
+<a href=#387 id=387 data-nosnippet>387</a>            PlanExecuteConfig {
+<a href=#388 id=388 data-nosnippet>388</a>                planning_prompt: <span class="string">"  "</span>.to_string(),
+<a href=#389 id=389 data-nosnippet>389</a>                ..PlanExecuteConfig::default()
+<a href=#390 id=390 data-nosnippet>390</a>            },
+<a href=#391 id=391 data-nosnippet>391</a>            PlanExecuteConfig {
+<a href=#392 id=392 data-nosnippet>392</a>                handoff_prompt: <span class="prelude-val">Some</span>(<span class="string">"  "</span>.to_string()),
+<a href=#393 id=393 data-nosnippet>393</a>                ..PlanExecuteConfig::default()
+<a href=#394 id=394 data-nosnippet>394</a>            },
+<a href=#395 id=395 data-nosnippet>395</a>        ] {
+<a href=#396 id=396 data-nosnippet>396</a>            <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#397 id=397 data-nosnippet>397</a>                PlanExecute::new(config),
+<a href=#398 id=398 data-nosnippet>398</a>                <span class="prelude-val">Err</span>(LibsyError::AlgorithmError { .. })
+<a href=#399 id=399 data-nosnippet>399</a>            ));
+<a href=#400 id=400 data-nosnippet>400</a>        }
+<a href=#401 id=401 data-nosnippet>401</a>    }
+<a href=#402 id=402 data-nosnippet>402</a>}
 </code></pre></div></section></main></body></html>
