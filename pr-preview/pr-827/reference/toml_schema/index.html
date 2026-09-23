@@ -1922,7 +1922,7 @@ Token-count requests do not apply target system prompts.</p>
 <td><code>context_window</code></td>
 <td style="text-align: center;">No</td>
 <td>unset</td>
-<td>Positive token count advertised for this route by <code>GET /v1/models</code>. Unset values appear as <code>null</code>. This does not enforce a request limit.</td>
+<td>Positive token count advertised for this route as <code>data[].context_length</code> on <code>GET /v1/models</code>. Unset values appear as <code>null</code>. This does not enforce a request limit.</td>
 </tr>
 <tr>
 <td><code>tool_calling</code></td>
