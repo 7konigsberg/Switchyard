@@ -1442,10 +1442,11 @@
 <h1 id="use-switchyard-with-pi">Use Switchyard with pi<a class="headerlink" href="#use-switchyard-with-pi" title="Permanent link">&para;</a></h1>
 <p><a href="https://github.com/earendil-works/pi">pi</a> reads its model providers from
 <code>~/.pi/agent/models.json</code>. Add Switchyard there and pi sends every model call to
-<code>switchyard-server</code>, which picks the target model for each call. pi has no
-<code>OPENAI_BASE_URL</code>; the provider entry is how you point it at a proxy. Tested with pi
-0.84.3 against the <a href="../../getting_started/#server-path">Getting Started</a> server on
-<code>http://localhost:4000</code> with route id <code>switchyard</code>.</p>
+<code>switchyard-server</code>, which picks the target model for each call. pi does not read
+<code>OPENAI_BASE_URL</code>, so a provider entry is how you point pi at a proxy. This
+page was tested with pi 0.84.3 against the
+<a href="../../getting_started/#server-path">Getting Started</a> server on <code>http://localhost:4000</code>
+with route id <code>switchyard</code>.</p>
 <h2 id="configure">Configure<a class="headerlink" href="#configure" title="Permanent link">&para;</a></h2>
 <p><code>~/.pi/agent/models.json</code>:</p>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
@@ -1476,32 +1477,36 @@
 <ul>
 <li><code>models[].id</code> must equal a route <code>id</code> from your TOML file. Add one entry per route.</li>
 <li><code>apiKey</code> is a placeholder. Switchyard ignores client keys unless an LLM client sets
-  <code>forward_auth = true</code>. pi still needs some value before it lists the model.</li>
-<li><code>contextWindow</code> and <code>maxTokens</code> drive pi's compaction and output cap; pi does not read
-  them from the server. Use the smallest context window among the route's targets.</li>
-<li><code>reasoning: true</code> enables <code>--thinking</code>; pi then sends <code>reasoning_effort</code>.</li>
+  <code>forward_auth = true</code>. pi still needs some value here before it lists the model.</li>
+<li><code>contextWindow</code> and <code>maxTokens</code> set pi's compaction limit and output cap. pi does not
+  read these values from the server. Use the smallest context window among the route's
+  targets.</li>
+<li><code>reasoning: true</code> turns on the <code>--thinking</code> flag. pi then sends <code>reasoning_effort</code>.</li>
 <li><code>supportsDeveloperRole: false</code> keeps the system prompt in the <code>system</code> role, which
-  every upstream accepts.</li>
-<li><code>sendSessionAffinityHeaders</code> with <code>sessionAffinityFormat: "openrouter"</code> makes pi send
-  <code>x-session-id</code>, which Switchyard reads as the session id. Routes with
-  <code>classify_trigger = "user_turn"</code> or <code>"new_session"</code>, advisor budgets, the stage
-  router's <code>capable_hold_turns</code>, and <code>GET /v1/routing/session-stats</code> depend on it.</li>
+  every upstream provider accepts.</li>
+<li><code>sendSessionAffinityHeaders: true</code> with <code>sessionAffinityFormat: "openrouter"</code> makes pi
+  send the <code>x-session-id</code> header. Switchyard reads that header as the session id. Routes
+  with <code>classify_trigger = "user_turn"</code> or <code>"new_session"</code>, advisor budgets, the stage
+  router's <code>capable_hold_turns</code>, and <code>GET /v1/routing/session-stats</code> all depend on the
+  session id.</li>
 </ul>
 <h2 id="run">Run<a class="headerlink" href="#run" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pi<span class="w"> </span>--provider<span class="w"> </span>switchyard<span class="w"> </span>--model<span class="w"> </span>switchyard
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>pi<span class="w"> </span>-p<span class="w"> </span>--provider<span class="w"> </span>switchyard<span class="w"> </span>--model<span class="w"> </span>switchyard<span class="w"> </span><span class="s2">&quot;List the files in this directory.&quot;</span>
 </span></code></pre></div>
-<p><code>--thinking off|minimal|low|medium|high|xhigh</code> sets the reasoning level pi sends.</p>
+<p><code>--thinking off|minimal|low|medium|high|xhigh</code> sets the reasoning level that pi sends.</p>
 <h2 id="check-the-routing">Check the routing<a class="headerlink" href="#check-the-routing" title="Permanent link">&para;</a></h2>
-<p><code>curl -s localhost:4000/v1/stats | jq '.models | map_values({calls, prompt_tokens})'</code>
+<p>The command <code>curl -s localhost:4000/v1/stats | jq '.models | map_values({calls, prompt_tokens})'</code>
 lists each target model with its call count. Every response carries the header
-<code>x-model-router-selected-model</code>. With <code>--routing-log-file PATH</code> the server writes one
-record per call; <code>session_id</code> below is pi's <code>x-session-id</code>:</p>
+<code>x-model-router-selected-model</code>. With <code>--routing-log-file PATH</code>, the server writes one
+record per call. In the record below, <code>session_id</code> is the value of pi's <code>x-session-id</code>
+header:</p>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span><span class="nt">&quot;route_id&quot;</span><span class="p">:</span><span class="s2">&quot;switchyard&quot;</span><span class="p">,</span><span class="nt">&quot;algorithm&quot;</span><span class="p">:</span><span class="s2">&quot;stage_router&quot;</span><span class="p">,</span><span class="nt">&quot;model&quot;</span><span class="p">:</span><span class="s2">&quot;azure/anthropic/claude-haiku-4-5&quot;</span><span class="p">,</span><span class="nt">&quot;session_id&quot;</span><span class="p">:</span><span class="s2">&quot;01a0caac-e421-7328-adaf-79d3440c0406&quot;</span><span class="p">,</span><span class="nt">&quot;prompt_tokens&quot;</span><span class="p">:</span><span class="mi">2659</span><span class="p">,</span><span class="nt">&quot;completion_tokens&quot;</span><span class="p">:</span><span class="mi">97</span><span class="p">}</span>
 </span></code></pre></div>
 <h2 id="which-request-api">Which request API<a class="headerlink" href="#which-request-api" title="Permanent link">&para;</a></h2>
-<p>Switchyard forwards a same-format body unchanged apart from <code>model</code>, and translates the
-request when the route's LLM client uses another format.</p>
+<p>When the route's LLM client uses the same format as the request, Switchyard forwards the
+body unchanged except for <code>model</code>. When the client uses another format, Switchyard
+translates the request.</p>
 <table>
 <thead>
 <tr>
@@ -1514,27 +1519,27 @@ request when the route's LLM client uses another format.</p>
 <tr>
 <td><code>openai-completions</code></td>
 <td><code>/v1/chat/completions</code></td>
-<td>Default. Matches <code>format = "openai_chat"</code> clients such as OpenRouter.</td>
+<td>Default. The targets use <code>format = "openai_chat"</code>, for example OpenRouter.</td>
 </tr>
 <tr>
 <td><code>openai-responses</code></td>
 <td><code>/v1/responses</code></td>
-<td>The targets use <code>format = "openai_responses"</code>. pi sends <code>store: false</code> and the full history every turn; keep <code>sessionAffinityFormat: "openrouter"</code>.</td>
+<td>The targets use <code>format = "openai_responses"</code>. pi sends <code>store: false</code> and the full history every turn. Keep <code>sessionAffinityFormat: "openrouter"</code>.</td>
 </tr>
 <tr>
 <td><code>anthropic-messages</code></td>
 <td><code>/v1/messages</code></td>
-<td>Avoid with pi. See below.</td>
+<td>Do not use it with pi. See below.</td>
 </tr>
 </tbody>
 </table>
-<p>Do not use <code>anthropic-messages</code> with pi. Switchyard names the served target in the
-response <code>model</code>, and pi's Anthropic client stores that id on the assistant message. When
-routing picks another target on the next turn, pi treats it as a model switch: it drops
-thinking signatures and turns off overflow compaction. pi's OpenAI clients keep the local
-id <code>switchyard</code>.</p>
-<p>Set <code>cost</code> on the model entry if you want pi's cost display to be non-zero.
-<a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/2a57f65f6bc57dd3e22039590c01ba892b2c573f/benchmark/README.md"><code>benchmark/run-baseline.sh</code></a> runs Terminal-Bench tasks with
+<p>Do not use <code>anthropic-messages</code> with pi. Switchyard puts the served target's id in the
+response <code>model</code> field, and pi's Anthropic client stores that id on the assistant
+message. When routing picks another target on the next turn, pi treats the change as a
+model switch: it drops thinking signatures and turns off overflow compaction. pi's OpenAI
+clients keep the local id <code>switchyard</code> instead.</p>
+<p>Set <code>cost</code> on the model entry if you want pi to show a non-zero cost.
+<a href="https://github.com/NVIDIA-NeMo/Switchyard/blob/551ccec5411bdd4156019ccf3e577083e5bf5d83/benchmark/README.md"><code>benchmark/run-baseline.sh</code></a> runs Terminal-Bench tasks with
 pi through Switchyard when you pass <code>--agent pi</code>.</p>
 
 

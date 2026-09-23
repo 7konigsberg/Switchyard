@@ -1477,9 +1477,10 @@
 <p><a href="https://github.com/can1357/oh-my-pi">Oh My Pi</a> (<code>omp</code>) is a coding agent based on pi.
 It reads its model providers from <code>~/.omp/agent/models.yml</code>. Add Switchyard there and
 <code>omp</code> sends every model call to <code>switchyard-server</code>. <code>omp</code> has no <code>--base-url</code> flag, and
-<code>OPENAI_BASE_URL</code> does not move its built-in <code>openai</code> provider. Tested with Oh My Pi
-18.1.21 against the <a href="../../getting_started/#server-path">Getting Started</a> server on
-<code>http://localhost:4000</code> with route id <code>switchyard</code>.</p>
+setting <code>OPENAI_BASE_URL</code> does not change the address of its built-in <code>openai</code> provider.
+This page was tested with Oh My Pi 18.1.21 against the
+<a href="../../getting_started/#server-path">Getting Started</a> server on <code>http://localhost:4000</code>
+with route id <code>switchyard</code>.</p>
 <h2 id="configure">Configure<a class="headerlink" href="#configure" title="Permanent link">&para;</a></h2>
 <p><code>~/.omp/agent/models.yml</code>:</p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">providers</span><span class="p">:</span>
@@ -1496,11 +1497,12 @@ It reads its model providers from <code>~/.omp/agent/models.yml</code>. Add Swit
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">        </span><span class="nt">maxTokens</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32000</span>
 </span></code></pre></div>
 <ul>
-<li><code>auth: none</code> marks the provider keyless. Switchyard ignores client keys unless an LLM
-  client sets <code>forward_auth = true</code>; without <code>auth: none</code>, <code>omp</code> refuses to send a request.</li>
+<li><code>auth: none</code> marks the provider as keyless. Switchyard ignores client keys unless an
+  LLM client sets <code>forward_auth = true</code>. Without <code>auth: none</code>, <code>omp</code> refuses to send a
+  request.</li>
 <li><code>models[].id</code> must equal a route <code>id</code> from your TOML file. <code>contextWindow</code> and
-  <code>maxTokens</code> drive <code>omp</code>'s compaction and output cap; <code>reasoning: true</code> enables
-  <code>--thinking</code>.</li>
+  <code>maxTokens</code> set <code>omp</code>'s compaction limit and output cap. <code>reasoning: true</code> turns on the
+  <code>--thinking</code> flag.</li>
 <li><code>omp models find switchyard</code> shows the loaded entry.</li>
 </ul>
 <h3 id="or-let-omp-list-the-routes">Or let omp list the routes<a class="headerlink" href="#or-let-omp-list-the-routes" title="Permanent link">&para;</a></h3>
@@ -1512,25 +1514,27 @@ It reads its model providers from <code>~/.omp/agent/models.yml</code>. Add Swit
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="nt">discovery</span><span class="p">:</span>
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openai-models-list</span>
 </span></code></pre></div>
-<p><code>omp</code> reads <code>GET /v1/models</code> and adds one model per route, sized from the
-<code>context_length</code> the server reports for routes that declare <code>context_window</code> (128K
-tokens otherwise). Discovered models have no thinking controls and accept text only;
-list the models by hand when you need <code>--thinking</code> or image input. <code>omp</code> caches the list
-for a day; run <code>omp models refresh</code> after you change the routes.</p>
+<p><code>omp</code> reads <code>GET /v1/models</code> and adds one model per route. For routes that declare
+<code>context_window</code>, <code>omp</code> takes the context window from the <code>context_length</code> field that
+the server reports. Other routes get <code>omp</code>'s default of 128K tokens. Discovered models
+have no thinking controls and accept text only. List the models by hand when you need
+<code>--thinking</code> or image input. <code>omp</code> caches the list for a day, so run <code>omp models refresh</code>
+after you change the routes.</p>
 <h2 id="run">Run<a class="headerlink" href="#run" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>omp<span class="w"> </span>--model<span class="w"> </span>switchyard/switchyard
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>omp<span class="w"> </span>-p<span class="w"> </span>--model<span class="w"> </span>switchyard/switchyard<span class="w"> </span><span class="s2">&quot;List the files in this directory.&quot;</span>
 </span></code></pre></div>
-<p><code>--thinking off|minimal|low|medium|high|xhigh</code> sets the reasoning level.
+<p><code>--thinking off|minimal|low|medium|high|xhigh</code> sets the reasoning level. Setting
 <code>modelRoles.default: switchyard/switchyard</code> in <code>~/.omp/agent/config.yml</code> makes the route
 the default model.</p>
 <h2 id="check-the-routing">Check the routing<a class="headerlink" href="#check-the-routing" title="Permanent link">&para;</a></h2>
-<p>The checks in <a href="../pi/#check-the-routing">Use Switchyard with pi</a> work the same way. On the
-Chat Completions API <code>omp</code> sends no session header for a custom provider, so the routing
-log records <code>"session_id": null</code>. Routes with <code>classify_trigger = "user_turn"</code> or
-<code>"new_session"</code>, advisor budgets, and the stage router's <code>capable_hold_turns</code> then treat
-each request on its own. For per-session routing use <code>anthropic-messages</code>: <code>omp</code> sends
-<code>X-Claude-Code-Session-Id</code>, which Switchyard reads as the session id.</p>
+<p>The checks in <a href="../pi/#check-the-routing">Use Switchyard with pi</a> work the same way for
+<code>omp</code>. On the Chat Completions API, <code>omp</code> sends no session header for a custom provider,
+so the routing log records <code>"session_id": null</code>. Routes with
+<code>classify_trigger = "user_turn"</code> or <code>"new_session"</code>, advisor budgets, and the stage
+router's <code>capable_hold_turns</code> then treat each request as its own session. If you need
+per-session routing, use <code>anthropic-messages</code>. On that API <code>omp</code> sends the
+<code>X-Claude-Code-Session-Id</code> header, which Switchyard reads as the session id.</p>
 <h2 id="which-request-api">Which request API<a class="headerlink" href="#which-request-api" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1544,7 +1548,7 @@ each request on its own. For per-session routing use <code>anthropic-messages</c
 <tr>
 <td><code>openai-completions</code></td>
 <td><code>/v1/chat/completions</code></td>
-<td>Default. Matches <code>format = "openai_chat"</code> clients such as OpenRouter.</td>
+<td>Default. The targets use <code>format = "openai_chat"</code>, for example OpenRouter.</td>
 </tr>
 <tr>
 <td><code>openai-responses</code></td>
@@ -1558,14 +1562,16 @@ each request on its own. For per-session routing use <code>anthropic-messages</c
 </tr>
 </tbody>
 </table>
-<p>Switchyard forwards a same-format body unchanged apart from <code>model</code>, and translates the
-request when the route's LLM client uses another format. Unlike pi, <code>omp</code> keeps the
-local model id on stored messages, so the served target name in the response does not
-affect its thinking replay or compaction.</p>
-<p>Port 4000 is also the default for <code>omp</code>'s <code>litellm</code> provider and for <code>omp auth-gateway</code>.
-If <code>LITELLM_API_KEY</code> is set, <code>omp</code> probes <code>http://localhost:4000/v1</code> as a LiteLLM proxy;
-run Switchyard on another port or set <code>LITELLM_BASE_URL</code>. Set <code>cost</code> on the model entry
-if you want <code>omp</code>'s cost display to be non-zero.</p>
+<p>When the route's LLM client uses the same format as the request, Switchyard forwards the
+body unchanged except for <code>model</code>. When the client uses another format, Switchyard
+translates the request. Unlike pi, <code>omp</code> keeps the local model id <code>switchyard</code> on stored
+messages, so the served target's name in the response does not affect its thinking
+replay or compaction.</p>
+<p>Port 4000 is also the default port for <code>omp</code>'s <code>litellm</code> provider and for
+<code>omp auth-gateway</code>. If <code>LITELLM_API_KEY</code> is set, <code>omp</code> probes <code>http://localhost:4000/v1</code>
+as a LiteLLM proxy. In that case, run Switchyard on another port or set
+<code>LITELLM_BASE_URL</code>. Set <code>cost</code> on the model entry if you want <code>omp</code> to show a non-zero
+cost.</p>
 
 
 
